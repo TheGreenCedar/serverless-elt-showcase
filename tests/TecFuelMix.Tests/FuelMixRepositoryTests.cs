@@ -3,16 +3,20 @@ using TecFuelMix.Core;
 
 namespace TecFuelMix.Tests;
 
-public sealed class FuelMixRepositoryTests
+public sealed class FuelMixRepositoryTests : IClassFixture<PostgresFixture>
 {
-    private const string ConnectionString =
-        "Host=localhost;Port=55432;Database=fuelmix;Username=fuelmix_app;Password=fuelmix_dev_password";
+    private readonly PostgresFixture _postgres;
+
+    public FuelMixRepositoryTests(PostgresFixture postgres)
+    {
+        _postgres = postgres;
+    }
 
     [Fact]
     public async Task UpsertSnapshotAsync_is_idempotent_by_source_ref_and_category()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
         var repository = new FuelMixRepository(dataSource);
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
 
@@ -33,8 +37,8 @@ public sealed class FuelMixRepositoryTests
     [Fact]
     public async Task UpsertSnapshotAsync_removes_readings_absent_from_replacement_snapshot()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
         var repository = new FuelMixRepository(dataSource);
         var original = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         var replacement = original with
@@ -64,29 +68,5 @@ public sealed class FuelMixRepositoryTests
         Assert.Equal(27000m, reader.GetDecimal(1));
         Assert.Equal("Coal  (27,000 MW)", reader.GetString(2));
         Assert.False(await reader.ReadAsync());
-    }
-
-    private static async Task ResetDatabase(NpgsqlDataSource dataSource)
-    {
-        var schemaPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "TecFuelMix.Core",
-            "Schema.sql");
-        var schema = await File.ReadAllTextAsync(schemaPath);
-        await using (var schemaCommand = dataSource.CreateCommand(schema))
-        {
-            await schemaCommand.ExecuteNonQueryAsync();
-        }
-
-        await using var cleanup = dataSource.CreateCommand("""
-            truncate table ingestion_runs, fuel_mix_readings, fuel_mix_snapshots restart identity cascade;
-            """);
-        await cleanup.ExecuteNonQueryAsync();
     }
 }
