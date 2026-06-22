@@ -4,12 +4,12 @@ C#/.NET implementation of a serverless ELT flow for MISO real-time fuel mix data
 
 ## Planning Inputs
 
-The implementation was generated from two planning artifacts:
+This README and `docs/evidence/` are the canonical evaluator-facing implementation and verification surfaces. The planning files below are non-canonical context: they explain earlier design reasoning and task sequencing, but they may include superseded plan steps or evidence targets.
 
 - [planning/tec-fuelmix-plan.md](planning/tec-fuelmix-plan.md): architecture reasoning, scale decisions, data model, and interview talking points.
 - [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
 
-These files explain why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core. This README and `docs/evidence/` are the current implementation and verification surfaces.
+Use these only as planning context for why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core.
 
 ## Architecture
 

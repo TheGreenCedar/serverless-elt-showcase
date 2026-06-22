@@ -629,6 +629,15 @@
         </div>
       </section>
 
+      <section class="card elevated" style="--i:0; border-color: var(--accent); margin-bottom: 26px;">
+        <div class="label"><span class="dot"></span> Non-canonical planning context</div>
+        <p>
+          This visual plan is background context only. The canonical evaluator-facing surfaces are
+          <code>README.md</code> and <code>docs/evidence/</code>; this file may include superseded
+          plan steps or proof targets.
+        </p>
+      </section>
+
       <div id="shape" class="sec-head">
         <span class="sec-num">01</span>
         <h2>Chosen Shape</h2>
@@ -636,10 +645,10 @@
       <div class="grid">
         <article class="card elevated" style="--i:0">
           <div class="label"><span class="dot"></span> Application</div>
-          <h3>ASP.NET Core Minimal API</h3>
+          <h3>API Gateway read Lambda</h3>
           <p>
-            Small read surface, thin route handlers, service classes for ingestion and querying.
-            Controllers would be extra ceremony for this scope.
+            Small read surface behind API Gateway REST caching, usage-plan throttling, Lambda reserved
+            concurrency, and RDS Proxy. A separate web app would be extra ceremony for this scope.
           </p>
         </article>
         <article class="card elevated" style="--i:1">

@@ -2,8 +2,6 @@
 
 > Planning input: this task plan was used to generate most of the implementation. Some tasks are superseded by the current README and evidence files.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build a C# serverless ELT system that fetches MISO FuelMix data once per minute, buffers it through SQS, writes idempotently to PostgreSQL, and exposes cached safe read APIs.
 
 **Architecture:** EventBridge invokes a fetch Lambda that calls MISO and publishes raw snapshots to SQS. A writer Lambda consumes SQS messages and upserts PostgreSQL through RDS Proxy. A read Lambda sits behind API Gateway REST API caching, usage plans, throttles, and RDS Proxy so read spikes do not flood PostgreSQL.
