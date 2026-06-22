@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: fuelmix
+      POSTGRES_USER: fuelmix_app
+      POSTGRES_PASSWORD: fuelmix_dev_password
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuelmix_app -d fuelmix"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
