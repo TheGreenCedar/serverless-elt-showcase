@@ -1,4 +1,5 @@
 using Npgsql;
+using NpgsqlTypes;
 
 namespace TecFuelMix.Core;
 
@@ -11,13 +12,13 @@ public sealed class FuelMixRepository
         _dataSource = dataSource;
     }
 
-    public async Task<FuelMixSnapshot?> GetLatestSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<FuelMixSnapshotResponse?> GetLatestSnapshotAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var snapshotCommand = new NpgsqlCommand("""
-            select id, source_ref_id, interval_est, total_mw, raw_payload::text
+            select id, source_ref_id, interval_est, total_mw
             from fuel_mix_snapshots
-            order by interval_est desc
+            order by interval_est desc, id desc
             limit 1;
             """, connection);
 
@@ -31,7 +32,6 @@ public sealed class FuelMixRepository
         var sourceRefId = snapshotReader.GetString(1);
         var intervalEst = snapshotReader.GetDateTime(2);
         var totalMw = snapshotReader.GetDecimal(3);
-        var rawPayload = snapshotReader.GetString(4);
         await snapshotReader.CloseAsync();
 
         var readings = new List<FuelMixReading>();
@@ -52,7 +52,86 @@ public sealed class FuelMixRepository
                 readingsReader.GetString(2)));
         }
 
-        return new FuelMixSnapshot(sourceRefId, intervalEst, totalMw, rawPayload, readings);
+        return new FuelMixSnapshotResponse(sourceRefId, intervalEst, totalMw, readings);
+    }
+
+    public async Task<IReadOnlyList<FuelMixHistoryRow>> QueryHistoryAsync(
+        DateTime from,
+        DateTime to,
+        string? category,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            select s.source_ref_id, s.interval_est, r.category, r.mw, r.source_label
+            from fuel_mix_snapshots s
+            inner join fuel_mix_readings r on r.snapshot_id = s.id
+            where s.interval_est >= @from
+              and s.interval_est < @to
+              and (@category is null or r.category = @category)
+            order by s.interval_est desc, r.category
+            limit @limit;
+            """);
+        command.Parameters.AddWithValue("from", from);
+        command.Parameters.AddWithValue("to", to);
+        command.Parameters.Add("category", NpgsqlDbType.Text).Value =
+            string.IsNullOrWhiteSpace(category) ? DBNull.Value : category;
+        command.Parameters.AddWithValue("limit", limit);
+
+        var rows = new List<FuelMixHistoryRow>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new FuelMixHistoryRow(
+                reader.GetString(0),
+                reader.GetDateTime(1),
+                reader.GetString(2),
+                reader.GetDecimal(3),
+                reader.GetString(4)));
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<string>> GetCategoriesAsync(CancellationToken cancellationToken)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            select distinct category
+            from fuel_mix_readings
+            order by category;
+            """);
+
+        var categories = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            categories.Add(reader.GetString(0));
+        }
+
+        return categories;
+    }
+
+    public async Task<IngestionRunStatus?> GetLatestIngestionRunAsync(CancellationToken cancellationToken)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            select started_at, completed_at, status, source_ref_id, error_message
+            from ingestion_runs
+            order by started_at desc, id desc
+            limit 1;
+            """);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new IngestionRunStatus(
+            reader.GetDateTime(0),
+            reader.IsDBNull(1) ? null : reader.GetDateTime(1),
+            reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4));
     }
 
     public async Task<long> UpsertSnapshotAsync(FuelMixSnapshot snapshot, CancellationToken cancellationToken)

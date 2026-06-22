@@ -69,4 +69,99 @@ public sealed class FuelMixRepositoryTests : IClassFixture<PostgresFixture>
         Assert.Equal("Coal  (27,000 MW)", reader.GetString(2));
         Assert.False(await reader.ReadAsync());
     }
+
+    [Fact]
+    public async Task GetLatestSnapshotAsync_returns_newest_snapshot()
+    {
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
+        var repository = new FuelMixRepository(dataSource);
+        var older = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
+        var newer = older with
+        {
+            SourceRefId = "22-Jun-2026 - Interval 11:10 EST",
+            IntervalEst = older.IntervalEst.AddMinutes(5)
+        };
+
+        await repository.UpsertSnapshotAsync(older, CancellationToken.None);
+        await repository.UpsertSnapshotAsync(newer, CancellationToken.None);
+
+        var latest = await repository.GetLatestSnapshotAsync(CancellationToken.None);
+
+        Assert.NotNull(latest);
+        Assert.Equal(newer.SourceRefId, latest.SourceRefId);
+        Assert.Equal(newer.IntervalEst, latest.IntervalEst);
+        Assert.Equal(newer.TotalMw, latest.TotalMw);
+        Assert.Equal(2, latest.Readings.Count);
+    }
+
+    [Fact]
+    public async Task QueryHistoryAsync_filters_by_range_category_and_limit()
+    {
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
+        var repository = new FuelMixRepository(dataSource);
+        var older = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
+        var newer = older with
+        {
+            SourceRefId = "22-Jun-2026 - Interval 11:10 EST",
+            IntervalEst = older.IntervalEst.AddMinutes(5)
+        };
+
+        await repository.UpsertSnapshotAsync(older, CancellationToken.None);
+        await repository.UpsertSnapshotAsync(newer, CancellationToken.None);
+
+        var rows = await repository.QueryHistoryAsync(
+            older.IntervalEst.AddMinutes(-1),
+            newer.IntervalEst.AddMinutes(1),
+            "Coal",
+            1,
+            CancellationToken.None);
+
+        var row = Assert.Single(rows);
+        Assert.Equal(newer.SourceRefId, row.SourceRefId);
+        Assert.Equal(newer.IntervalEst, row.IntervalEst);
+        Assert.Equal("Coal", row.Category);
+        Assert.Equal(26869m, row.Mw);
+        Assert.Equal("Coal  (26,869 MW)", row.SourceLabel);
+    }
+
+    [Fact]
+    public async Task GetCategoriesAsync_returns_distinct_categories()
+    {
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
+        var repository = new FuelMixRepository(dataSource);
+        var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
+
+        await repository.UpsertSnapshotAsync(snapshot, CancellationToken.None);
+
+        var categories = await repository.GetCategoriesAsync(CancellationToken.None);
+
+        Assert.Equal(["Battery Storage", "Coal"], categories);
+    }
+
+    [Fact]
+    public async Task GetLatestIngestionRunAsync_returns_most_recent_run()
+    {
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
+        var repository = new FuelMixRepository(dataSource);
+        var older = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
+        var newer = older with
+        {
+            SourceRefId = "22-Jun-2026 - Interval 11:10 EST",
+            IntervalEst = older.IntervalEst.AddMinutes(5)
+        };
+
+        await repository.UpsertSnapshotAsync(older, CancellationToken.None);
+        await repository.UpsertSnapshotAsync(newer, CancellationToken.None);
+
+        var run = await repository.GetLatestIngestionRunAsync(CancellationToken.None);
+
+        Assert.NotNull(run);
+        Assert.Equal("succeeded", run.Status);
+        Assert.Equal(newer.SourceRefId, run.SourceRefId);
+        Assert.NotNull(run.CompletedAt);
+    }
 }
