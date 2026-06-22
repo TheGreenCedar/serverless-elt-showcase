@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TecFuelMix.Core\TecFuelMix.Core.csproj" />
     <ProjectReference Include="..\..\src\TecFuelMix.FetchLambda\TecFuelMix.FetchLambda.csproj" />
+    <ProjectReference Include="..\..\src\TecFuelMix.WriterLambda\TecFuelMix.WriterLambda.csproj" />
   </ItemGroup>
 
 </Project>
