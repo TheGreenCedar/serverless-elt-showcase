@@ -178,6 +178,14 @@ resource "aws_db_proxy" "postgres" {
     iam_auth    = "DISABLED"
     secret_arn  = aws_secretsmanager_secret.read_db.arn
   }
+
+  depends_on = [
+    aws_iam_role_policy.rds_proxy_secret,
+    aws_secretsmanager_secret_version.read_db,
+    aws_secretsmanager_secret_version.writer_db,
+    aws_security_group_rule.proxy_from_lambda,
+    aws_security_group_rule.proxy_to_postgres
+  ]
 }
 
 resource "aws_db_proxy_default_target_group" "postgres" {
@@ -194,4 +202,8 @@ resource "aws_db_proxy_target" "postgres" {
   db_instance_identifier = aws_db_instance.postgres.identifier
   db_proxy_name          = aws_db_proxy.postgres.name
   target_group_name      = aws_db_proxy_default_target_group.postgres.name
+
+  depends_on = [
+    aws_db_proxy_default_target_group.postgres
+  ]
 }

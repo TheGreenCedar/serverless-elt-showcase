@@ -64,6 +64,12 @@ variable "read_api_lambda_image_uri" {
   type        = string
 }
 
+variable "read_api_bearer_token" {
+  description = "Bearer token accepted by the read API Lambda authorizer."
+  type        = string
+  sensitive   = true
+}
+
 variable "read_api_cache_ttl_seconds" {
   description = "API Gateway method cache TTL for shared read responses."
   type        = number

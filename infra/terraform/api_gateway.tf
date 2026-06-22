@@ -14,9 +14,19 @@ resource "aws_api_gateway_resource" "latest" {
   rest_api_id = aws_api_gateway_rest_api.read_api.id
 }
 
+resource "aws_api_gateway_authorizer" "read_api" {
+  name                             = "${var.project_name}-read-api-bearer"
+  rest_api_id                      = aws_api_gateway_rest_api.read_api.id
+  type                             = "TOKEN"
+  authorizer_result_ttl_in_seconds = 300
+  authorizer_uri                   = aws_lambda_function.read_api_authorizer.invoke_arn
+  identity_source                  = "method.request.header.Authorization"
+}
+
 resource "aws_api_gateway_method" "latest_get" {
   api_key_required = true
-  authorization    = "NONE"
+  authorization    = "CUSTOM"
+  authorizer_id    = aws_api_gateway_authorizer.read_api.id
   http_method      = "GET"
   resource_id      = aws_api_gateway_resource.latest.id
   rest_api_id      = aws_api_gateway_rest_api.read_api.id
@@ -39,14 +49,25 @@ resource "aws_lambda_permission" "api_gateway_read" {
   statement_id  = "AllowApiGatewayInvoke"
 }
 
+resource "aws_lambda_permission" "api_gateway_authorizer" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.read_api_authorizer.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.read_api.execution_arn}/authorizers/${aws_api_gateway_authorizer.read_api.id}"
+  statement_id  = "AllowApiGatewayAuthorizerInvoke"
+}
+
 resource "aws_api_gateway_deployment" "read_api" {
   rest_api_id = aws_api_gateway_rest_api.read_api.id
 
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.latest.id,
+      aws_api_gateway_authorizer.read_api.id,
       aws_api_gateway_method.latest_get.id,
-      aws_api_gateway_integration.latest_get.id
+      aws_api_gateway_integration.latest_get.id,
+      aws_lambda_permission.api_gateway_authorizer.id,
+      aws_lambda_permission.api_gateway_read.id
     ]))
   }
 
@@ -55,7 +76,9 @@ resource "aws_api_gateway_deployment" "read_api" {
   }
 
   depends_on = [
-    aws_api_gateway_integration.latest_get
+    aws_api_gateway_integration.latest_get,
+    aws_lambda_permission.api_gateway_authorizer,
+    aws_lambda_permission.api_gateway_read
   ]
 }
 

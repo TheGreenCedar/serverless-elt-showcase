@@ -23,3 +23,18 @@ output "read_api_key_value" {
   value       = aws_api_gateway_api_key.external_reader.value
   sensitive   = true
 }
+
+output "read_api_authorizer_lambda_name" {
+  description = "Lambda function name used by API Gateway token authorizer."
+  value       = aws_lambda_function.read_api_authorizer.function_name
+}
+
+output "writer_db_secret_arn" {
+  description = "Secrets Manager secret ARN used by the writer Lambda."
+  value       = aws_secretsmanager_secret.writer_db.arn
+}
+
+output "read_db_secret_arn" {
+  description = "Secrets Manager secret ARN used by the read API Lambda."
+  value       = aws_secretsmanager_secret.read_db.arn
+}

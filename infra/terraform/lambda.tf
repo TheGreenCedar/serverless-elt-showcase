@@ -1,8 +1,3 @@
-locals {
-  writer_postgres_connection_string = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${local.writer_db_username};Password=${var.writer_db_password};SSL Mode=Require"
-  read_postgres_connection_string   = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${local.read_db_username};Password=${var.read_db_password};SSL Mode=Require"
-}
-
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -29,6 +24,11 @@ resource "aws_iam_role" "read_api_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
+resource "aws_iam_role" "read_api_authorizer_lambda" {
+  name               = "${var.project_name}-read-api-authorizer-lambda"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
 resource "aws_iam_role_policy_attachment" "fetch_lambda_basic" {
   role       = aws_iam_role.fetch_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -52,6 +52,11 @@ resource "aws_iam_role_policy_attachment" "read_api_lambda_basic" {
 resource "aws_iam_role_policy_attachment" "read_api_lambda_vpc" {
   role       = aws_iam_role.read_api_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "read_api_authorizer_lambda_basic" {
+  role       = aws_iam_role.read_api_authorizer_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy" "fetch_sqs" {
@@ -107,6 +112,58 @@ resource "aws_iam_role_policy" "writer_sqs" {
   })
 }
 
+resource "aws_iam_role_policy" "writer_db_secret" {
+  name = "${var.project_name}-writer-db-secret"
+  role = aws_iam_role.writer_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.writer_db.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "read_api_db_secret" {
+  name = "${var.project_name}-read-api-db-secret"
+  role = aws_iam_role.read_api_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.read_db.arn
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_group" "fetch" {
+  name              = "/aws/lambda/${var.project_name}-fetch"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "writer" {
+  name              = "/aws/lambda/${var.project_name}-writer"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "read_api" {
+  name              = "/aws/lambda/${var.project_name}-read-api"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "read_api_authorizer" {
+  name              = "/aws/lambda/${var.project_name}-read-api-authorizer"
+  retention_in_days = 14
+}
+
 resource "aws_lambda_function" "fetch" {
   function_name                  = "${var.project_name}-fetch"
   role                           = aws_iam_role.fetch_lambda.arn
@@ -120,6 +177,13 @@ resource "aws_lambda_function" "fetch" {
       RAW_SNAPSHOT_QUEUE_URL = aws_sqs_queue.raw_snapshot.url
     }
   }
+
+  depends_on = [
+    aws_cloudwatch_log_group.fetch,
+    aws_iam_role_policy_attachment.fetch_lambda_basic,
+    aws_iam_role_policy.fetch_async_failure_destination,
+    aws_iam_role_policy.fetch_sqs
+  ]
 }
 
 resource "aws_lambda_function_event_invoke_config" "fetch" {
@@ -133,6 +197,10 @@ resource "aws_lambda_function_event_invoke_config" "fetch" {
       destination = aws_sqs_queue.fetch_async_failure_dlq.arn
     }
   }
+
+  depends_on = [
+    aws_iam_role_policy.fetch_async_failure_destination
+  ]
 }
 
 resource "aws_lambda_function" "writer" {
@@ -150,9 +218,19 @@ resource "aws_lambda_function" "writer" {
 
   environment {
     variables = {
-      POSTGRES_CONNECTION_STRING = local.writer_postgres_connection_string
+      POSTGRES_DATABASE   = local.db_name
+      POSTGRES_HOST       = aws_db_proxy.postgres.endpoint
+      POSTGRES_SECRET_ARN = aws_secretsmanager_secret.writer_db.arn
     }
   }
+
+  depends_on = [
+    aws_cloudwatch_log_group.writer,
+    aws_iam_role_policy.writer_db_secret,
+    aws_iam_role_policy.writer_sqs,
+    aws_iam_role_policy_attachment.writer_lambda_basic,
+    aws_iam_role_policy_attachment.writer_lambda_vpc
+  ]
 }
 
 resource "aws_lambda_function" "read_api" {
@@ -170,9 +248,41 @@ resource "aws_lambda_function" "read_api" {
 
   environment {
     variables = {
-      POSTGRES_CONNECTION_STRING = local.read_postgres_connection_string
+      POSTGRES_DATABASE   = local.db_name
+      POSTGRES_HOST       = aws_db_proxy.postgres.endpoint
+      POSTGRES_SECRET_ARN = aws_secretsmanager_secret.read_db.arn
     }
   }
+
+  depends_on = [
+    aws_cloudwatch_log_group.read_api,
+    aws_iam_role_policy.read_api_db_secret,
+    aws_iam_role_policy_attachment.read_api_lambda_basic,
+    aws_iam_role_policy_attachment.read_api_lambda_vpc
+  ]
+}
+
+resource "aws_lambda_function" "read_api_authorizer" {
+  function_name = "${var.project_name}-read-api-authorizer"
+  role          = aws_iam_role.read_api_authorizer_lambda.arn
+  package_type  = "Image"
+  image_uri     = var.read_api_lambda_image_uri
+  timeout       = 10
+
+  image_config {
+    command = ["TecFuelMix.ReadApiLambda::TecFuelMix.ReadApiLambda.Function::Authorize"]
+  }
+
+  environment {
+    variables = {
+      READ_API_BEARER_TOKEN = var.read_api_bearer_token
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.read_api_authorizer,
+    aws_iam_role_policy_attachment.read_api_authorizer_lambda_basic
+  ]
 }
 
 resource "aws_lambda_event_source_mapping" "writer_from_sqs" {
@@ -180,6 +290,10 @@ resource "aws_lambda_event_source_mapping" "writer_from_sqs" {
   function_name           = aws_lambda_function.writer.arn
   batch_size              = 5
   function_response_types = ["ReportBatchItemFailures"]
+
+  depends_on = [
+    aws_iam_role_policy.writer_sqs
+  ]
 }
 
 data "aws_iam_policy_document" "scheduler_assume" {
@@ -240,4 +354,8 @@ resource "aws_scheduler_schedule" "fetch" {
       maximum_retry_attempts       = 0
     }
   }
+
+  depends_on = [
+    aws_iam_role_policy.scheduler_invoke
+  ]
 }
