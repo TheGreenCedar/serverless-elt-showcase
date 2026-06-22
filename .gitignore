@@ -1,0 +1,35 @@
+# .NET build output
+bin/
+obj/
+TestResults/
+
+# IDE and editor state
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+appsettings.Development.json
+
+# Build and packaging artifacts
+artifacts/
+publish/
+*.nupkg
+*.snupkg
+
+# Terraform local state
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+!terraform.tfvars.example
+*.tfplan
+
+# OS files
+Thumbs.db
+.DS_Store
