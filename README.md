@@ -47,7 +47,7 @@ API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency
 | Read compute | API Gateway + Lambda | Implemented for `GET /fuel-mix/latest`. | Small operational surface; cache/throttle/concurrency controls protect the database. |
 | Database protection | API cache + reserved concurrency + RDS Proxy | Implemented in Terraform; live AWS behavior not exercised locally. | Stops repeated reads early and caps connection pressure on PostgreSQL. |
 | Data access | Npgsql/raw SQL | Implemented in `TecFuelMix.Core`. | Upsert/idempotency is PostgreSQL-specific and small; EF Core would add ceremony here. |
-| Migrations | DbUp | Planned hardening target; current bootstrap is documented SQL. | SQL-first migrations fit the existing schema and make bootstrap rerunnable. |
+| Migrations | DbUp console migrator | Implemented for schema, role bootstrap, grants, and optional app-role password rotation. | SQL-first migrations fit the existing schema and make bootstrap rerunnable. |
 | Auth | Lambda authorizer + API key usage plan | Lambda authorizer is a planned hardening target; current Terraform uses API key usage plan throttling. | Bearer token should be auth; API key should be throttle/quota only. |
 | Infrastructure as code | Terraform only | Implemented; no CDK stack is published. | Avoids duplicate Terraform/CDK stacks while still publishing infrastructure as code. |
 
@@ -83,51 +83,18 @@ docker build -f .\src\TecFuelMix.ReadApiLambda\Dockerfile -t tec-fuelmix-read-ap
 
 ## Deployment Bootstrap
 
-Terraform creates the RDS instance, RDS Proxy secrets, and Lambda environment wiring, but it does not connect to PostgreSQL to create application roles, grant privileges, or apply the schema. For an AWS deployment, run this once from an operator host that can reach the private database endpoint, using the admin credentials created for RDS. This has not been applied to AWS in this local technical challenge.
+Terraform creates the RDS instance, RDS Proxy secrets, and Lambda environment wiring, but it does not connect to PostgreSQL to apply schema migrations or bootstrap application roles. For an AWS deployment, run the DbUp migrator from an operator host that can reach the private RDS endpoint, using the admin credentials created for RDS. This has not been applied to AWS in this local technical challenge.
 
-Apply the schema first:
+Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
 
 ```powershell
-psql "host=<rds-endpoint> port=5432 dbname=fuelmix user=fuelmix_admin sslmode=require" -v ON_ERROR_STOP=1 -f .\src\TecFuelMix.Core\Schema.sql
+$env:POSTGRES_ADMIN_CONNECTION_STRING='Host=<rds-endpoint>;Port=5432;Database=fuelmix;Username=fuelmix_admin;Password=<admin-password>;SSL Mode=Require'
+$env:WRITER_DB_PASSWORD='<writer-db-password>'
+$env:READ_DB_PASSWORD='<read-db-password>'
+dotnet run --project .\src\TecFuelMix.DbMigrator\TecFuelMix.DbMigrator.csproj
 ```
 
-Then bootstrap the app roles and grants. Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
-
-```sql
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fuelmix_writer') THEN
-        CREATE ROLE fuelmix_writer LOGIN;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fuelmix_reader') THEN
-        CREATE ROLE fuelmix_reader LOGIN;
-    END IF;
-END
-$$;
-
-ALTER ROLE fuelmix_writer WITH PASSWORD '<writer-db-password>';
-ALTER ROLE fuelmix_reader WITH PASSWORD '<read-db-password>';
-
-GRANT CONNECT ON DATABASE fuelmix TO fuelmix_writer, fuelmix_reader;
-GRANT USAGE ON SCHEMA public TO fuelmix_writer, fuelmix_reader;
-
-GRANT SELECT, INSERT, UPDATE, DELETE
-    ON fuel_mix_snapshots, fuel_mix_readings, ingestion_runs
-    TO fuelmix_writer;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO fuelmix_writer;
-
-GRANT SELECT
-    ON fuel_mix_snapshots, fuel_mix_readings
-    TO fuelmix_reader;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO fuelmix_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT USAGE, SELECT ON SEQUENCES TO fuelmix_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT SELECT ON TABLES TO fuelmix_reader;
-```
+If `WRITER_DB_PASSWORD` and `READ_DB_PASSWORD` are omitted, the migrator still applies schema and grant migrations but leaves existing role passwords unchanged. Provide both password variables together when creating or rotating the runtime database users.
 
 Captured evidence from this workspace is stored in `docs/evidence`:
 

@@ -1,12 +1,23 @@
 do $$
 begin
     if not exists (select 1 from pg_roles where rolname = 'fuelmix_writer') then
-        create role fuelmix_writer;
+        create role fuelmix_writer login;
     end if;
 
     if not exists (select 1 from pg_roles where rolname = 'fuelmix_reader') then
-        create role fuelmix_reader;
+        create role fuelmix_reader login;
     end if;
+end
+$$;
+
+alter role fuelmix_writer login;
+alter role fuelmix_reader login;
+
+do $$
+begin
+    execute format(
+        'grant connect on database %I to fuelmix_writer, fuelmix_reader',
+        current_database());
 end
 $$;
 

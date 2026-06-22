@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="dbup-postgresql" Version="7.0.1" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>
