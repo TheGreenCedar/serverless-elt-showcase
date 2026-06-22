@@ -4,14 +4,11 @@
 #1 transferring dockerfile: 410B done
 #1 DONE 0.0s
 
-#2 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
-#2 ...
+#2 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
+#2 DONE 0.1s
 
-#3 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
-#3 DONE 1.0s
-
-#2 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
-#2 DONE 1.1s
+#3 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
+#3 DONE 0.2s
 
 #4 [internal] load .dockerignore
 #4 transferring context: 2B done
@@ -29,8 +26,8 @@
 #7 DONE 0.1s
 
 #5 [internal] load build context
-#5 transferring context: 158.13kB 0.3s done
-#5 DONE 0.4s
+#5 transferring context: 169.06kB 0.2s done
+#5 DONE 0.2s
 
 #8 [build 2/4] WORKDIR /src
 #8 CACHED
@@ -39,13 +36,13 @@
 #9 DONE 2.1s
 
 #10 [build 4/4] RUN dotnet publish src/TecFuelMix.ReadApiLambda/TecFuelMix.ReadApiLambda.csproj -c Release -o /app/publish
-#10 1.260   Determining projects to restore...
-#10 3.261   Restored /src/src/TecFuelMix.ReadApiLambda/TecFuelMix.ReadApiLambda.csproj (in 1.49 sec).
-#10 3.261   Restored /src/src/TecFuelMix.Core/TecFuelMix.Core.csproj (in 1.49 sec).
-#10 6.431   TecFuelMix.Core -> /src/src/TecFuelMix.Core/bin/Release/net10.0/TecFuelMix.Core.dll
-#10 6.848   TecFuelMix.ReadApiLambda -> /src/src/TecFuelMix.ReadApiLambda/bin/Release/net10.0/TecFuelMix.ReadApiLambda.dll
-#10 6.885   TecFuelMix.ReadApiLambda -> /app/publish/
-#10 DONE 7.1s
+#10 1.117   Determining projects to restore...
+#10 3.037   Restored /src/src/TecFuelMix.ReadApiLambda/TecFuelMix.ReadApiLambda.csproj (in 1.34 sec).
+#10 3.037   Restored /src/src/TecFuelMix.Core/TecFuelMix.Core.csproj (in 1.34 sec).
+#10 5.565   TecFuelMix.Core -> /src/src/TecFuelMix.Core/bin/Release/net10.0/TecFuelMix.Core.dll
+#10 6.013   TecFuelMix.ReadApiLambda -> /src/src/TecFuelMix.ReadApiLambda/bin/Release/net10.0/TecFuelMix.ReadApiLambda.dll
+#10 6.057   TecFuelMix.ReadApiLambda -> /app/publish/
+#10 DONE 6.2s
 
 #11 [final 1/2] WORKDIR /var/task
 #11 CACHED
@@ -55,14 +52,14 @@
 
 #13 exporting to image
 #13 exporting layers
-#13 exporting layers 0.4s done
-#13 exporting manifest sha256:ab011203c4fa2d27e91008eb787c1e31b7d266e112018a180d2cc21c0bd6eedd 0.1s done
-#13 exporting config sha256:332c050a4e03e8c2b637c2ee5f847f9a2f796b06b5b285228415e545d68003c9 0.0s done
-#13 exporting attestation manifest sha256:f1742cad30287df187af5ea2209ef1349e8e65ae776db2e5fbf761d5c67c2c8b 0.1s done
-#13 exporting manifest list sha256:7550eaee48af0bbd7250d8f755123a7bd347fe9c69582d1be727cf50b489cace
-#13 exporting manifest list sha256:7550eaee48af0bbd7250d8f755123a7bd347fe9c69582d1be727cf50b489cace 0.1s done
+#13 exporting layers 1.0s done
+#13 exporting manifest sha256:40ac55d253e02bf478240f1d3a95c340df971cb2f3da38bddb68a078a00a58ac 0.1s done
+#13 exporting config sha256:86e44b5ef1f7e130a386275fdac65589549a826e822fae4977dcb0a8919047e8 0.0s done
+#13 exporting attestation manifest sha256:1236f96b99e9d07d6027a8e067bf536ef168546546374d4962701409d62625d1 0.1s done
+#13 exporting manifest list sha256:de248b2d6338a88558873b5cdb051a242fa3cfdb7865e62a982f2db037e38c33
+#13 exporting manifest list sha256:de248b2d6338a88558873b5cdb051a242fa3cfdb7865e62a982f2db037e38c33 0.1s done
 #13 naming to docker.io/library/tec-fuelmix-read-api:latest done
 #13 unpacking to docker.io/library/tec-fuelmix-read-api:latest 0.1s done
-#13 DONE 0.9s
+#13 DONE 1.4s
 
-View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/c1xa80vgy10qf10905dwenxkq
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/mviury84dxsgp3vj31aarhhij

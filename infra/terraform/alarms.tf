@@ -8,6 +8,8 @@ resource "aws_cloudwatch_metric_alarm" "dlq_visible_messages" {
   statistic           = "Maximum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
 
   dimensions = {
     QueueName = aws_sqs_queue.raw_snapshot_dlq.name
@@ -24,6 +26,8 @@ resource "aws_cloudwatch_metric_alarm" "scheduler_dlq_visible_messages" {
   statistic           = "Maximum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
 
   dimensions = {
     QueueName = aws_sqs_queue.scheduled_fetch_dlq.name
@@ -40,6 +44,8 @@ resource "aws_cloudwatch_metric_alarm" "writer_errors" {
   statistic           = "Sum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
 
   dimensions = {
     FunctionName = aws_lambda_function.writer.function_name
@@ -56,6 +62,8 @@ resource "aws_cloudwatch_metric_alarm" "read_api_throttles" {
   statistic           = "Sum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
 
   dimensions = {
     FunctionName = aws_lambda_function.read_api.function_name

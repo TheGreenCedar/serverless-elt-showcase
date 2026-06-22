@@ -8,59 +8,6 @@ using TecFuelMix.Core;
 
 namespace TecFuelMix.ReadApiLambda;
 
-public sealed record QueryOptions(DateTime? FromUtc, DateTime? ToUtc, string? Category, int Limit)
-{
-    private const int DefaultLimit = 100;
-    private const int MaxLimit = 500;
-    private static readonly TimeSpan MaxRange = TimeSpan.FromDays(7);
-
-    public static QueryOptions From(IReadOnlyDictionary<string, string>? query)
-    {
-        if (query is null)
-        {
-            return new QueryOptions(null, null, null, DefaultLimit);
-        }
-
-        var from = ParseOptionalDateTime(query, "from");
-        var to = ParseOptionalDateTime(query, "to");
-        if (from.HasValue && to.HasValue && to.Value - from.Value > MaxRange)
-        {
-            throw new ArgumentOutOfRangeException(nameof(query), "Date ranges over 7 days are not supported.");
-        }
-
-        var category = query.TryGetValue("category", out var categoryValue) && !string.IsNullOrWhiteSpace(categoryValue)
-            ? categoryValue.Trim()
-            : null;
-
-        var limit = DefaultLimit;
-        if (query.TryGetValue("limit", out var limitValue) && int.TryParse(limitValue, out var parsedLimit))
-        {
-            limit = Math.Clamp(parsedLimit, 1, MaxLimit);
-        }
-
-        return new QueryOptions(from, to, category, limit);
-    }
-
-    private static DateTime? ParseOptionalDateTime(IReadOnlyDictionary<string, string> query, string key)
-    {
-        if (!query.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        if (DateTime.TryParse(
-            value,
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AllowWhiteSpaces | System.Globalization.DateTimeStyles.AssumeLocal,
-            out var parsed))
-        {
-            return parsed;
-        }
-
-        throw new ArgumentOutOfRangeException(key, $"Invalid {key} value.");
-    }
-}
-
 public sealed class Function
 {
     private const string LatestPath = "/fuel-mix/latest";
@@ -90,7 +37,10 @@ public sealed class Function
             var query = request.QueryStringParameters is null
                 ? null
                 : new Dictionary<string, string>(request.QueryStringParameters);
-            _ = QueryOptions.From(query);
+            if (query?.Count > 0)
+            {
+                return JsonResponse(400, new { message = "/fuel-mix/latest does not support query parameters." });
+            }
 
             using var timeout = CreateInvocationTimeout(context);
             var repository = new FuelMixRepository(_dataSource);

@@ -4,11 +4,14 @@
 #1 transferring dockerfile: 402B done
 #1 DONE 0.0s
 
-#2 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
-#2 DONE 0.5s
+#2 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
+#2 ...
 
-#3 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
-#3 DONE 0.8s
+#3 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
+#3 DONE 0.3s
+
+#2 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
+#2 DONE 0.6s
 
 #4 [internal] load .dockerignore
 #4 transferring context: 2B done
@@ -22,33 +25,26 @@
 #6 DONE 0.1s
 
 #7 [base 1/1] FROM public.ecr.aws/lambda/dotnet:10@sha256:3ec97320c51f150aa53652bc3fd3287fb228b61079245d9be305a6987ff50df8
-#7 resolve public.ecr.aws/lambda/dotnet:10@sha256:3ec97320c51f150aa53652bc3fd3287fb228b61079245d9be305a6987ff50df8
 #7 resolve public.ecr.aws/lambda/dotnet:10@sha256:3ec97320c51f150aa53652bc3fd3287fb228b61079245d9be305a6987ff50df8 0.1s done
-#7 DONE 0.1s
+#7 DONE 0.2s
 
 #5 [internal] load build context
-#5 transferring context: 115.03MB 5.0s
-#5 transferring context: 230.53MB 10.0s
-#5 transferring context: 347.22MB 15.2s
-#5 transferring context: 470.17MB 20.3s
-#5 transferring context: 587.08MB 25.4s
-#5 transferring context: 699.60MB 30.4s
-#5 transferring context: 719.98MB 31.7s done
-#5 DONE 31.7s
+#5 transferring context: 1.72MB 0.6s done
+#5 DONE 1.2s
 
 #8 [build 2/4] WORKDIR /src
 #8 CACHED
 
 #9 [build 3/4] COPY . .
-#9 DONE 3.4s
+#9 DONE 2.6s
 
 #10 [build 4/4] RUN dotnet publish src/TecFuelMix.FetchLambda/TecFuelMix.FetchLambda.csproj -c Release -o /app/publish
-#10 1.655   Determining projects to restore...
-#10 4.079   Restored /src/src/TecFuelMix.FetchLambda/TecFuelMix.FetchLambda.csproj (in 1.68 sec).
-#10 4.079   Restored /src/src/TecFuelMix.Core/TecFuelMix.Core.csproj (in 1.68 sec).
-#10 7.112   TecFuelMix.Core -> /src/src/TecFuelMix.Core/bin/Release/net10.0/TecFuelMix.Core.dll
-#10 7.515   TecFuelMix.FetchLambda -> /src/src/TecFuelMix.FetchLambda/bin/Release/net10.0/TecFuelMix.FetchLambda.dll
-#10 7.547   TecFuelMix.FetchLambda -> /app/publish/
+#10 1.334   Determining projects to restore...
+#10 3.386   Restored /src/src/TecFuelMix.Core/TecFuelMix.Core.csproj (in 1.56 sec).
+#10 3.386   Restored /src/src/TecFuelMix.FetchLambda/TecFuelMix.FetchLambda.csproj (in 1.56 sec).
+#10 6.937   TecFuelMix.Core -> /src/src/TecFuelMix.Core/bin/Release/net10.0/TecFuelMix.Core.dll
+#10 7.396   TecFuelMix.FetchLambda -> /src/src/TecFuelMix.FetchLambda/bin/Release/net10.0/TecFuelMix.FetchLambda.dll
+#10 7.478   TecFuelMix.FetchLambda -> /app/publish/
 #10 DONE 7.7s
 
 #11 [final 1/2] WORKDIR /var/task
@@ -60,13 +56,13 @@
 #13 exporting to image
 #13 exporting layers
 #13 exporting layers 0.4s done
-#13 exporting manifest sha256:ae05813b5fde8f0d26abdeed97502656df59f766c80e12643af3796f01be030e 0.1s done
-#13 exporting config sha256:7f6b18762e75c0985c1ac3e3d70b83ad4377097d9dae66f7d8cb5b037b057807 0.1s done
-#13 exporting attestation manifest sha256:7f1b4fe2ef74ad72914c33aad58ba2894a437baee22e310626ad14b209ecec3c 0.1s done
-#13 exporting manifest list sha256:c2aa40a935c8f56f59678571cb53619f93ff08e0f6686c128639049c922dc2ff
-#13 exporting manifest list sha256:c2aa40a935c8f56f59678571cb53619f93ff08e0f6686c128639049c922dc2ff 0.1s done
+#13 exporting manifest sha256:01895e67763569ddc3249279f337f795098c404043ffe94174806c42f75af55b 0.0s done
+#13 exporting config sha256:f34b8e63cc2327ef646f60c31a1a5506a2e1710dd7325d5766b28533e5c0c43a 0.1s done
+#13 exporting attestation manifest sha256:138d8808c000e95acc5161f29678598e3903f32f8015bdc1ae5147b30b91b1a9 0.1s done
+#13 exporting manifest list sha256:0469649c83ef5e225b870faf0bd52cc4e70f942f0dfa02b1921bc031331acfb9
+#13 exporting manifest list sha256:0469649c83ef5e225b870faf0bd52cc4e70f942f0dfa02b1921bc031331acfb9 0.1s done
 #13 naming to docker.io/library/tec-fuelmix-fetch:latest done
 #13 unpacking to docker.io/library/tec-fuelmix-fetch:latest 0.1s done
-#13 DONE 1.0s
+#13 DONE 0.9s
 
-View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/a10ipgz5vzkq31d9r175pxcw5
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/u86pk8mzmxbdylvlw6kc7szxv

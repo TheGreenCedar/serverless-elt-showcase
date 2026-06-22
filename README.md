@@ -23,7 +23,7 @@ The fetch path and write path are intentionally separate:
 
 - `TecFuelMix.FetchLambda` is scheduled once per minute. It only calls MISO and publishes the raw payload to SQS through `RAW_SNAPSHOT_QUEUE_URL`.
 - `TecFuelMix.WriterLambda` consumes SQS messages and idempotently writes PostgreSQL through `POSTGRES_CONNECTION_STRING`.
-- `TecFuelMix.ReadApiLambda` reads PostgreSQL through `POSTGRES_CONNECTION_STRING` and returns bounded JSON responses for API Gateway.
+- `TecFuelMix.ReadApiLambda` reads PostgreSQL through `POSTGRES_CONNECTION_STRING` and returns the latest ingested snapshot at `/fuel-mix/latest`. That endpoint is latest-only and rejects query parameters; historical filtering is not implemented in this slice.
 
 SQS protects ingestion durability. If PostgreSQL or RDS Proxy is unavailable after MISO returns a snapshot, the raw payload remains queued for retry and eventual DLQ handling. PostgreSQL unique keys keep duplicate SQS deliveries from creating duplicate snapshots or readings.
 
@@ -59,11 +59,59 @@ docker build -f .\src\TecFuelMix.WriterLambda\Dockerfile -t tec-fuelmix-writer .
 docker build -f .\src\TecFuelMix.ReadApiLambda\Dockerfile -t tec-fuelmix-read-api .
 ```
 
+## Deployment Bootstrap
+
+Terraform creates the RDS instance, RDS Proxy secrets, and Lambda environment wiring, but it does not connect to PostgreSQL to create application roles, grant privileges, or apply the schema. For an AWS deployment, run this once from an operator host that can reach the private database endpoint, using the admin credentials created for RDS. This has not been applied to AWS in this local technical challenge.
+
+Apply the schema first:
+
+```powershell
+psql "host=<rds-endpoint> port=5432 dbname=fuelmix user=fuelmix_admin sslmode=require" -v ON_ERROR_STOP=1 -f .\src\TecFuelMix.Core\Schema.sql
+```
+
+Then bootstrap the app roles and grants. Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
+
+```sql
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fuelmix_writer') THEN
+        CREATE ROLE fuelmix_writer LOGIN;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fuelmix_reader') THEN
+        CREATE ROLE fuelmix_reader LOGIN;
+    END IF;
+END
+$$;
+
+ALTER ROLE fuelmix_writer WITH PASSWORD '<writer-db-password>';
+ALTER ROLE fuelmix_reader WITH PASSWORD '<read-db-password>';
+
+GRANT CONNECT ON DATABASE fuelmix TO fuelmix_writer, fuelmix_reader;
+GRANT USAGE ON SCHEMA public TO fuelmix_writer, fuelmix_reader;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+    ON fuel_mix_snapshots, fuel_mix_readings, ingestion_runs
+    TO fuelmix_writer;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO fuelmix_writer;
+
+GRANT SELECT
+    ON fuel_mix_snapshots, fuel_mix_readings
+    TO fuelmix_reader;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO fuelmix_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO fuelmix_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT ON TABLES TO fuelmix_reader;
+```
+
 Captured evidence from this workspace is stored in `docs/evidence`:
 
 | File | Command | Result |
 | --- | --- | --- |
-| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 14 tests, 0 failed |
+| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 13 tests, 0 failed |
 | `02-local-postgres-status.txt` | `docker compose ps` | `db` container running and healthy on host port `55432` |
 | `03-terraform-validate.txt` | `terraform -chdir=infra/terraform validate` | Terraform configuration valid |
 | `04-docker-fetch-build.txt` | Fetch Lambda Docker build | Image `tec-fuelmix-fetch:latest` built |
@@ -74,7 +122,7 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 
 | Control | Where | Why it exists |
 | --- | --- | --- |
-| One-minute schedule | `aws_scheduler_schedule.fetch` | Meets the source polling limit and keeps ingestion cadence explicit. |
+| One-minute schedule with zero Scheduler retries | `aws_scheduler_schedule.fetch` | Meets the source polling limit and prevents EventBridge Scheduler from re-invoking the MISO fetch inside the same minute after a downstream publish failure. |
 | Fetch reserved concurrency `1` | `aws_lambda_function.fetch` | Prevents overlapping MISO fetches from the scheduled path. |
 | SQS raw snapshot queue + DLQ | `aws_sqs_queue.raw_snapshot` | Decouples MISO fetch success from database availability and preserves failed writes for retry/redrive. |
 | Writer reserved concurrency `1` | `aws_lambda_function.writer` | Keeps database write pressure predictable. |
@@ -89,7 +137,7 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 ## Known Boundaries
 
 - Terraform was validated locally only. No `terraform plan` or `terraform apply` was run against AWS.
-- RDS role grants and schema/bootstrap execution are follow-ups. Terraform declares database users/secrets for RDS Proxy auth, but PostgreSQL role grants still need an operational bootstrap step.
+- RDS role grants and schema/bootstrap execution are documented above but were not applied to AWS. Terraform declares database users/secrets for RDS Proxy auth; PostgreSQL still needs the operational bootstrap step during deployment.
 - Lambda runtime secret retrieval is a follow-up. The current app reads full PostgreSQL connection strings from environment variables.
 - Live MISO, live SQS delivery, API Gateway cache hit/miss behavior, and RDS Proxy behavior are not exercised by the local evidence.
 - Local tests use Docker Compose PostgreSQL on port `55432`; they do not prove AWS networking, IAM, or managed-service behavior.

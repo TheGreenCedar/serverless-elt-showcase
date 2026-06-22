@@ -20,13 +20,6 @@ resource "aws_api_gateway_method" "latest_get" {
   http_method      = "GET"
   resource_id      = aws_api_gateway_resource.latest.id
   rest_api_id      = aws_api_gateway_rest_api.read_api.id
-
-  request_parameters = {
-    "method.request.querystring.category" = false
-    "method.request.querystring.from"     = false
-    "method.request.querystring.limit"    = false
-    "method.request.querystring.to"       = false
-  }
 }
 
 resource "aws_api_gateway_integration" "latest_get" {
@@ -36,13 +29,6 @@ resource "aws_api_gateway_integration" "latest_get" {
   rest_api_id             = aws_api_gateway_rest_api.read_api.id
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.read_api.invoke_arn
-
-  cache_key_parameters = [
-    "method.request.querystring.category",
-    "method.request.querystring.from",
-    "method.request.querystring.limit",
-    "method.request.querystring.to"
-  ]
 }
 
 resource "aws_lambda_permission" "api_gateway_read" {

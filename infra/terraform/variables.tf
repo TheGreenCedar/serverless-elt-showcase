@@ -87,3 +87,9 @@ variable "read_api_reserved_concurrency" {
   type        = number
   default     = 25
 }
+
+variable "alarm_action_arns" {
+  description = "Optional SNS topic or incident action ARNs used for CloudWatch alarm and recovery notifications."
+  type        = list(string)
+  default     = []
+}

@@ -208,7 +208,7 @@ resource "aws_scheduler_schedule" "fetch" {
 
     retry_policy {
       maximum_event_age_in_seconds = 300
-      maximum_retry_attempts       = 2
+      maximum_retry_attempts       = 0
     }
   }
 }
