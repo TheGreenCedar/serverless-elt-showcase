@@ -71,6 +71,8 @@ The implementation was generated from two human-authored planning artifacts:
 
 - `planning/tec-fuelmix-plan.md`: architecture reasoning, scale decisions, data model, and interview talking points.
 - `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`: implementation task plan used for agent-assisted code generation.
+- `planning/2026-06-22-tec-fuelmix-full-submission-hardening.md`: final hardening plan used to drive the broad implementation pass.
+- `planning/2026-06-22-parallel-worktree-execution-plan.md`: parallel worktree execution plan used to split and review the later tasks.
 
 These files explain why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core. The README and `docs/evidence/` are the current implementation and verification surfaces.
 ```
@@ -1124,7 +1126,7 @@ Expected: commit succeeds if changes exist.
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-06-22-tec-fuelmix-full-submission-hardening.md`. Two execution options:
+Plan complete and saved to `planning/2026-06-22-tec-fuelmix-full-submission-hardening.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - dispatch a fresh subagent per task, review between tasks, fast iteration.
 

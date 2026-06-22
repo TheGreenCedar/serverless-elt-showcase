@@ -8,6 +8,8 @@ This README and `docs/evidence/` are the canonical evaluator-facing implementati
 
 - [planning/tec-fuelmix-plan.md](planning/tec-fuelmix-plan.md): architecture reasoning, scale decisions, data model, and interview talking points.
 - [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
+- [planning/2026-06-22-tec-fuelmix-full-submission-hardening.md](planning/2026-06-22-tec-fuelmix-full-submission-hardening.md): final hardening plan used to drive the broad implementation pass.
+- [planning/2026-06-22-parallel-worktree-execution-plan.md](planning/2026-06-22-parallel-worktree-execution-plan.md): parallel worktree execution plan used to split and review the later tasks.
 
 Use these only as planning context for why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core.
 
