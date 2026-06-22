@@ -1,5 +1,7 @@
 # TEC FuelMix Serverless ELT Implementation Plan
 
+> Planning input: this task plan was used to generate most of the implementation. Some tasks are superseded by the current README and evidence files.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a C# serverless ELT system that fetches MISO FuelMix data once per minute, buffers it through SQS, writes idempotently to PostgreSQL, and exposes cached safe read APIs.
@@ -1695,7 +1697,7 @@ Expected: commit succeeds.
 
 ## Execution Options
 
-Plan complete and saved to `project instructions/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`. Two execution options:
+Plan complete and saved to `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - dispatch a fresh subagent per task, review between tasks, fast iteration.
 

@@ -1,5 +1,7 @@
 # Plan: TEC Fuel Mix Serverless ELT Service
 
+> Planning input: this was the human architecture and decision plan used to steer agent-assisted implementation. The README is the current evaluator-facing truth for what is implemented and verified.
+
 **Target**: C# / AWS Lambda / SQS / API Gateway cache / PostgreSQL / local-first proof  
 **Complexity**: Medium.
 
@@ -490,7 +492,7 @@ Tasks:
 
 ## 12. Verification Package
 
-Capture evidence in `docs/evidence/`:
+Planned evidence package for `docs/evidence/`:
 
 ```text
 docs/evidence/
@@ -512,7 +514,7 @@ docs/evidence/
   16-api-throttle-smoke.txt
 ```
 
-The most convincing evidence:
+The most convincing evidence to collect during implementation:
 
 - Same MISO payload imported twice creates no duplicates.
 - Fetch Lambda, writer Lambda, and read Lambda are separate deployables.
@@ -525,7 +527,7 @@ The most convincing evidence:
 
 ## 13. Requirement Traceability
 
-| Requirement | Revised design coverage | Proof |
+| Requirement | Revised design coverage | Proof to collect |
 | --- | --- | --- |
 | Periodic MISO import | EventBridge Scheduler invokes fetch Lambda every minute | CloudWatch scheduled invocation log |
 | Do not poll more than once per minute | Schedule cadence, fetch reserved concurrency 1, optional DynamoDB poll lock | Double-invoke evidence |

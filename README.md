@@ -2,6 +2,15 @@
 
 C#/.NET implementation of a serverless ELT flow for MISO real-time fuel mix data.
 
+## Planning Inputs
+
+The implementation was generated from two planning artifacts:
+
+- [planning/tec-fuelmix-plan.md](planning/tec-fuelmix-plan.md): architecture reasoning, scale decisions, data model, and interview talking points.
+- [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
+
+These files explain why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core. This README and `docs/evidence/` are the current implementation and verification surfaces.
+
 ## Architecture
 
 ```mermaid
@@ -28,6 +37,19 @@ The fetch path and write path are intentionally separate:
 SQS protects ingestion durability. If PostgreSQL or RDS Proxy is unavailable after MISO returns a snapshot, the raw payload remains queued for retry and eventual DLQ handling. PostgreSQL unique keys keep duplicate SQS deliveries from creating duplicate snapshots or readings.
 
 API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke Lambda or touch the database; cache misses still pass through throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL.
+
+## Decision Record
+
+| Decision | Choice | Current status | Why |
+| --- | --- | --- | --- |
+| Ingestion compute | Scheduled Lambda | Implemented in Terraform as EventBridge Scheduler -> fetch Lambda. | Short scheduled job, explicit one-minute cadence, no idle service. |
+| Write buffering | SQS + DLQ | Implemented in Terraform and Lambda wiring. | Preserves fetched payloads when PostgreSQL is unavailable. |
+| Read compute | API Gateway + Lambda | Implemented for `GET /fuel-mix/latest`. | Small operational surface; cache/throttle/concurrency controls protect the database. |
+| Database protection | API cache + reserved concurrency + RDS Proxy | Implemented in Terraform; live AWS behavior not exercised locally. | Stops repeated reads early and caps connection pressure on PostgreSQL. |
+| Data access | Npgsql/raw SQL | Implemented in `TecFuelMix.Core`. | Upsert/idempotency is PostgreSQL-specific and small; EF Core would add ceremony here. |
+| Migrations | DbUp | Planned hardening target; current bootstrap is documented SQL. | SQL-first migrations fit the existing schema and make bootstrap rerunnable. |
+| Auth | Lambda authorizer + API key usage plan | Lambda authorizer is a planned hardening target; current Terraform uses API key usage plan throttling. | Bearer token should be auth; API key should be throttle/quota only. |
+| Infrastructure as code | Terraform only | Implemented; no CDK stack is published. | Avoids duplicate Terraform/CDK stacks while still publishing infrastructure as code. |
 
 ## Local Verification
 
