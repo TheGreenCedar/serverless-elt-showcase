@@ -1,5 +1,7 @@
 using Amazon.Lambda.Core;
 using Amazon.Lambda.SQSEvents;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
 using Npgsql;
 using TecFuelMix.Core;
 
@@ -9,6 +11,8 @@ namespace TecFuelMix.WriterLambda;
 
 public sealed class Function
 {
+    private const string MetricsNamespace = "TecFuelMix";
+    private const string ServiceName = "WriterLambda";
     private static readonly TimeSpan TimeoutSafetyBuffer = TimeSpan.FromSeconds(1);
     private readonly Func<CancellationToken, Task<NpgsqlDataSource>> _dataSourceFactory;
     private readonly SemaphoreSlim _dataSourceLock = new(1, 1);
@@ -38,13 +42,23 @@ public sealed class Function
             {
                 var snapshot = FuelMixParser.Parse(record.Body);
                 await repository.UpsertSnapshotAsync(snapshot, cancellationToken);
-                context.Logger.LogInformation($"Persisted MISO FuelMix snapshot {snapshot.SourceRefId}.");
+                Metrics.PushSingleMetric("FuelMixWriteSucceeded", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
+                Logger.LogInformation("Persisted MISO FuelMix snapshot {SourceRefId}.", snapshot.SourceRefId);
             }
             catch (Exception ex)
             {
-                context.Logger.LogError($"Failed to persist SQS message {record.MessageId}: {ex}");
+                Metrics.PushSingleMetric("FuelMixWriteFailed", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
+                Logger.LogError(
+                    "Failed to persist SQS message {MessageId} with {ErrorType}.",
+                    record.MessageId,
+                    ex.GetType().Name);
                 failures.Add(new SQSBatchResponse.BatchItemFailure { ItemIdentifier = record.MessageId });
             }
+        }
+
+        if (failures.Count > 0)
+        {
+            Metrics.PushSingleMetric("FuelMixPartialBatchFailures", failures.Count, MetricUnit.Count, MetricsNamespace, ServiceName);
         }
 
         return new SQSBatchResponse(failures);

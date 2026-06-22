@@ -1,6 +1,8 @@
 using Amazon.Lambda.Core;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
 using TecFuelMix.Core;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -9,6 +11,8 @@ namespace TecFuelMix.FetchLambda
 {
     public sealed class Function
     {
+        private const string MetricsNamespace = "TecFuelMix";
+        private const string ServiceName = "FetchLambda";
         private static readonly Uri FuelMixUri = new("https://public-api.misoenergy.org/api/FuelMix");
         private static readonly TimeSpan TimeoutSafetyBuffer = TimeSpan.FromSeconds(1);
         private readonly HttpClient _httpClient;
@@ -29,30 +33,40 @@ namespace TecFuelMix.FetchLambda
 
         public async Task Handler(object input, ILambdaContext context)
         {
-            if (string.IsNullOrWhiteSpace(_queueUrl))
+            try
             {
-                throw new InvalidOperationException("RAW_SNAPSHOT_QUEUE_URL is required.");
-            }
-
-            using var timeout = CreateInvocationTimeout(context);
-            var cancellationToken = timeout.Token;
-            using var response = await _httpClient.GetAsync(FuelMixUri, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            var snapshot = FuelMixParser.Parse(json);
-
-            await _sqs.SendMessageAsync(new SendMessageRequest
-            {
-                QueueUrl = _queueUrl,
-                MessageBody = json,
-                MessageAttributes = new Dictionary<string, MessageAttributeValue>
+                if (string.IsNullOrWhiteSpace(_queueUrl))
                 {
-                    ["source_ref_id"] = new MessageAttributeValue { DataType = "String", StringValue = snapshot.SourceRefId },
-                    ["fetched_at_utc"] = new MessageAttributeValue { DataType = "String", StringValue = DateTimeOffset.UtcNow.ToString("O") }
+                    throw new InvalidOperationException("RAW_SNAPSHOT_QUEUE_URL is required.");
                 }
-            }, cancellationToken);
 
-            context.Logger.LogInformation($"Queued MISO FuelMix snapshot {snapshot.SourceRefId}.");
+                using var timeout = CreateInvocationTimeout(context);
+                var cancellationToken = timeout.Token;
+                using var response = await _httpClient.GetAsync(FuelMixUri, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                var snapshot = FuelMixParser.Parse(json);
+
+                await _sqs.SendMessageAsync(new SendMessageRequest
+                {
+                    QueueUrl = _queueUrl,
+                    MessageBody = json,
+                    MessageAttributes = new Dictionary<string, MessageAttributeValue>
+                    {
+                        ["source_ref_id"] = new MessageAttributeValue { DataType = "String", StringValue = snapshot.SourceRefId },
+                        ["fetched_at_utc"] = new MessageAttributeValue { DataType = "String", StringValue = DateTimeOffset.UtcNow.ToString("O") }
+                    }
+                }, cancellationToken);
+
+                Metrics.PushSingleMetric("FuelMixFetchSucceeded", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
+                Logger.LogInformation("Queued MISO FuelMix snapshot {SourceRefId}.", snapshot.SourceRefId);
+            }
+            catch (Exception ex)
+            {
+                Metrics.PushSingleMetric("FuelMixFetchFailed", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
+                Logger.LogError("MISO FuelMix fetch failed with {ErrorType}.", ex.GetType().Name);
+                throw;
+            }
         }
 
         private static CancellationTokenSource CreateInvocationTimeout(ILambdaContext context)

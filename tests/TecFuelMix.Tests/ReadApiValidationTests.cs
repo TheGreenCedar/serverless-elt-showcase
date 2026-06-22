@@ -370,4 +370,19 @@ public sealed class ReadApiValidationTests
     {
         return response.PolicyDocument.Statement.Single().Effect;
     }
+
+    [Fact]
+    public async Task Handler_returns_404_for_unknown_route()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayProxyRequest
+        {
+            Path = "/fuel-mix/unknown"
+        };
+
+        var response = await function.Handler(request, null!);
+
+        Assert.Equal(404, response.StatusCode);
+        Assert.Contains("Not found", response.Body);
+    }
 }

@@ -42,11 +42,24 @@ public sealed class FetchLambdaFunctionTests
         Assert.Null(sqs.Request);
     }
 
-    private sealed class StaticHttpMessageHandler(string body) : HttpMessageHandler
+    [Fact]
+    public async Task Handler_http_failure_throws_without_publishing()
+    {
+        using var httpClient = new HttpClient(new StaticHttpMessageHandler("unavailable", HttpStatusCode.InternalServerError));
+        var sqs = new RecordingSqsClient();
+        var context = new TestLambdaContext(TimeSpan.FromSeconds(10));
+        var function = new Function(httpClient, sqs, "https://sqs.us-east-1.amazonaws.com/123/raw");
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => function.Handler(new object(), context));
+
+        Assert.Null(sqs.Request);
+    }
+
+    private sealed class StaticHttpMessageHandler(string body, HttpStatusCode statusCode = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            var response = new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(body)
             };

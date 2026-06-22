@@ -3,6 +3,8 @@ using System.Net;
 using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
 using Npgsql;
 using TecFuelMix.Core;
 
@@ -15,6 +17,8 @@ public sealed class Function
     private const int DefaultLimit = 100;
     private const int MaxLimit = 500;
     private const int MaxRangeDays = 7;
+    private const string MetricsNamespace = "TecFuelMix";
+    private const string ServiceName = "ReadApiLambda";
     private static readonly string[] SourceLocalDateFormats =
     [
         "yyyy-MM-dd'T'HH:mm",
@@ -76,26 +80,42 @@ public sealed class Function
 
     public async Task<APIGatewayProxyResponse> Handler(APIGatewayProxyRequest request, ILambdaContext context)
     {
+        Metrics.PushSingleMetric("FuelMixReadRequest", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
         using var timeout = CreateInvocationTimeout(context);
 
-        return (request.HttpMethod?.ToUpperInvariant(), NormalizePath(request.Path)) switch
+        var route = NormalizePath(request.Path);
+        var response = (request.HttpMethod?.ToUpperInvariant(), route) switch
         {
             ("GET", "/fuel-mix/latest") => await Latest(timeout.Token),
             ("GET", "/fuel-mix") => await History(request.QueryStringParameters, timeout.Token),
             ("GET", "/fuel-mix/categories") => await Categories(timeout.Token),
             ("GET", "/ingestion-runs/latest") => await LatestIngestionRun(timeout.Token),
             ("GET", "/health") => Json(HttpStatusCode.OK, new { status = "ok" }),
-            _ => Json(HttpStatusCode.NotFound, new { error = "Route not found." })
+            _ => NotFound()
         };
+
+        return response;
     }
 
     private async Task<APIGatewayProxyResponse> Latest(CancellationToken cancellationToken)
     {
         var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
         var snapshot = await repository.GetLatestSnapshotAsync(cancellationToken);
-        return snapshot is null
-            ? Json(HttpStatusCode.NotFound, new { error = "No fuel mix snapshot found." })
-            : Json(HttpStatusCode.OK, snapshot);
+        if (snapshot is null)
+        {
+            Logger.LogInformation("No fuel mix snapshot found for latest request.");
+            return Json(HttpStatusCode.NotFound, new { error = "No fuel mix snapshot found." });
+        }
+
+        Metrics.PushSingleMetric(
+            "FuelMixLatestSnapshotAgeSeconds",
+            GetSnapshotAgeSeconds(snapshot.IntervalEst),
+            MetricUnit.Seconds,
+            MetricsNamespace,
+            ServiceName);
+        Logger.LogInformation("Returned latest fuel mix snapshot {SourceRefId}.", snapshot.SourceRefId);
+
+        return Json(HttpStatusCode.OK, snapshot);
     }
 
     private async Task<APIGatewayProxyResponse> History(
@@ -105,6 +125,7 @@ public sealed class Function
         if (!TryReadDate(query, "from", out var from, out var error) ||
             !TryReadDate(query, "to", out var to, out error))
         {
+            Logger.LogInformation("Rejected fuel mix history request with invalid date query.");
             return Json(HttpStatusCode.BadRequest, new { error });
         }
 
@@ -193,6 +214,12 @@ public sealed class Function
             : null;
     }
 
+    private static APIGatewayProxyResponse NotFound()
+    {
+        Logger.LogInformation("Read API route not found.");
+        return Json(HttpStatusCode.NotFound, new { error = "Not found." });
+    }
+
     private static APIGatewayProxyResponse Json(HttpStatusCode statusCode, object body)
     {
         return new APIGatewayProxyResponse
@@ -262,6 +289,12 @@ public sealed class Function
 
         error = null;
         return true;
+    }
+
+    private static double GetSnapshotAgeSeconds(DateTime intervalEst)
+    {
+        var interval = new DateTimeOffset(DateTime.SpecifyKind(intervalEst, DateTimeKind.Unspecified), TimeSpan.FromHours(-5));
+        return Math.Max(0, (DateTimeOffset.UtcNow - interval).TotalSeconds);
     }
 
     private static CancellationTokenSource CreateInvocationTimeout(ILambdaContext? context)
