@@ -1,6 +1,6 @@
 # TEC FuelMix Full Submission Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Track execution with the checkbox steps below and keep each task tied to the files, commands, and evidence it changes.
 
 **Goal:** Finish the TEC FuelMix challenge as a complete interview submission with stronger docs, repeatable DB bootstrap, real API auth, hardened Terraform, better observability, and portable tests.
 
@@ -24,33 +24,35 @@
 - `infra/terraform/`: the only IaC definition.
 - `docs/evidence/`: refreshed verification outputs.
 
-## Task 1: Rename Planning Docs And Make README Canonical
+## Task 1: Validate Planning Docs And README Canonical
 
 **Files:**
-- Move: `project instructions/` -> `planning/`
-- Modify: `README.md`
-- Modify: `planning/tec-fuelmix-plan.md`
-- Modify: `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`
+- Existing: `planning/`
+- Current: `README.md`
+- Current: `planning/tec-fuelmix-plan.md`
+- Current: `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`
 
-- [ ] **Step 1: Rename the planning directory**
+- [x] **Step 1: Validate the planning directory**
 
 Run:
 
 ```powershell
-Move-Item -LiteralPath 'project instructions' -Destination 'planning'
+Test-Path -LiteralPath 'planning\TEC_SeniorEng_TechnicalTest.md'
+Test-Path -LiteralPath 'planning\tec-fuelmix-plan.md'
+Test-Path -LiteralPath 'planning\2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md'
 ```
 
 Expected: `planning/TEC_SeniorEng_TechnicalTest.md`, `planning/tec-fuelmix-plan.md`, and `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md` exist.
 
-- [ ] **Step 2: Add planning-note headers**
+- [x] **Step 2: Verify planning-note headers**
 
-At the top of `planning/tec-fuelmix-plan.md`, below the title, add:
+`planning/tec-fuelmix-plan.md` includes this note below the title:
 
 ```markdown
 > Planning input: this was the human architecture and decision plan used to steer agent-assisted implementation. The README is the current evaluator-facing truth for what is implemented and verified.
 ```
 
-At the top of `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md`, below the title, add:
+`planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md` includes this note below the title:
 
 ```markdown
 > Planning input: this task plan was used to generate most of the implementation. Some tasks are superseded by the current README and evidence files.
@@ -58,9 +60,9 @@ At the top of `planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-pla
 
 Expected: neither planning doc presents planned live AWS evidence as already captured.
 
-- [ ] **Step 3: Update README planning section**
+- [x] **Step 3: Verify README planning section**
 
-Add a `Planning Inputs` section to `README.md` after the opening description:
+`README.md` includes a `Planning Inputs` section after the opening description:
 
 ```markdown
 ## Planning Inputs
@@ -75,9 +77,9 @@ These files explain why the system uses isolated ingestion, SQS buffering, API G
 
 Expected: evaluator can trace the plan without mistaking it for current evidence.
 
-- [ ] **Step 4: Update README decision table**
+- [x] **Step 4: Verify README decision table**
 
-Add or refresh a `Decision Record` table in `README.md`:
+`README.md` includes this `Decision Record` table:
 
 ```markdown
 ## Decision Record
@@ -96,27 +98,25 @@ Add or refresh a `Decision Record` table in `README.md`:
 
 Expected: decisions from the planning docs are visible in the README.
 
-- [ ] **Step 5: Run docs path check**
+- [x] **Step 5: Confirm docs path check**
 
 Run:
 
 ```powershell
-rg "project instructions|Planning input|Decision Record" README.md planning
+rg "Planning input|Decision Record" README.md planning
 ```
 
-Expected: no `README.md` references point to the old `project instructions` path.
+Expected: planning notes and README decision records are discoverable from the current docs paths.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Confirm completed docs commit**
 
 Run:
 
 ```powershell
-git add README.md planning
-git add -u
-git commit -m "docs: connect planning inputs to submission readme"
+git log -1 --oneline -- README.md planning
 ```
 
-Expected: commit succeeds.
+Expected: the completed Task 1 docs commit is visible.
 
 ## Task 2: Add Docker Build Context Guard
 
