@@ -372,6 +372,43 @@ public sealed class ReadApiValidationTests
     }
 
     [Fact]
+    public void Authorize_allows_read_route_set_for_cached_tokens()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            AuthorizationToken = "Bearer test-token",
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var env = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/*", Resource(response));
+    }
+
+    private static string Resource(APIGatewayCustomAuthorizerResponse response)
+    {
+        return response.PolicyDocument.Statement.Single().Resource.Single();
+    }
+
+    [Fact]
+    public async Task Handler_returns_503_for_dependency_failure()
+    {
+        var function = Function.CreateWithDataSourceFactory(_ => throw new TimeoutException("database unavailable"));
+
+        var response = await function.Handler(new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = "/fuel-mix/latest"
+        }, null!);
+
+        Assert.Equal(503, response.StatusCode);
+        Assert.Contains("unavailable", response.Body);
+    }
+
+    [Fact]
     public async Task Handler_returns_404_for_unknown_route()
     {
         var function = new Function(null!);

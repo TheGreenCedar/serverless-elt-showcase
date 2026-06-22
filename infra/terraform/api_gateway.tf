@@ -171,25 +171,42 @@ resource "aws_api_gateway_deployment" "read_api" {
   rest_api_id = aws_api_gateway_rest_api.read_api.id
 
   triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.latest.id,
-      aws_api_gateway_resource.categories.id,
-      aws_api_gateway_resource.ingestion_runs_latest.id,
-      aws_api_gateway_resource.health.id,
-      aws_api_gateway_authorizer.read_api.id,
-      aws_api_gateway_method.latest_get.id,
-      aws_api_gateway_method.fuel_mix_get.id,
-      aws_api_gateway_method.categories_get.id,
-      aws_api_gateway_method.ingestion_runs_latest_get.id,
-      aws_api_gateway_method.health_get.id,
-      aws_api_gateway_integration.latest_get.id,
-      aws_api_gateway_integration.fuel_mix_get.id,
-      aws_api_gateway_integration.categories_get.id,
-      aws_api_gateway_integration.ingestion_runs_latest_get.id,
-      aws_api_gateway_integration.health_get.id,
-      aws_lambda_permission.api_gateway_authorizer.id,
-      aws_lambda_permission.api_gateway_read.id
-    ]))
+    redeployment = sha1(jsonencode({
+      authorizer = {
+        identity_source = aws_api_gateway_authorizer.read_api.identity_source
+        ttl_seconds     = aws_api_gateway_authorizer.read_api.authorizer_result_ttl_in_seconds
+        uri             = aws_api_gateway_authorizer.read_api.authorizer_uri
+      }
+      routes = {
+        latest = {
+          path        = aws_api_gateway_resource.latest.path
+          method      = aws_api_gateway_method.latest_get.http_method
+          integration = aws_api_gateway_integration.latest_get.uri
+        }
+        history = {
+          path                 = aws_api_gateway_resource.fuel_mix.path
+          method               = aws_api_gateway_method.fuel_mix_get.http_method
+          integration          = aws_api_gateway_integration.fuel_mix_get.uri
+          cache_key_parameters = aws_api_gateway_integration.fuel_mix_get.cache_key_parameters
+          request_parameters   = aws_api_gateway_method.fuel_mix_get.request_parameters
+        }
+        categories = {
+          path        = aws_api_gateway_resource.categories.path
+          method      = aws_api_gateway_method.categories_get.http_method
+          integration = aws_api_gateway_integration.categories_get.uri
+        }
+        ingestion_runs_latest = {
+          path        = aws_api_gateway_resource.ingestion_runs_latest.path
+          method      = aws_api_gateway_method.ingestion_runs_latest_get.http_method
+          integration = aws_api_gateway_integration.ingestion_runs_latest_get.uri
+        }
+        health = {
+          path        = aws_api_gateway_resource.health.path
+          method      = aws_api_gateway_method.health_get.http_method
+          integration = aws_api_gateway_integration.health_get.uri
+        }
+      }
+    }))
   }
 
   lifecycle {

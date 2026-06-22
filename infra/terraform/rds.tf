@@ -23,6 +23,12 @@ resource "aws_security_group" "postgres" {
   vpc_id      = var.vpc_id
 }
 
+resource "aws_security_group" "secretsmanager_endpoint" {
+  name        = "${var.project_name}-secretsmanager-endpoint"
+  description = "Secrets Manager endpoint accepts HTTPS from Lambda clients"
+  vpc_id      = var.vpc_id
+}
+
 resource "aws_security_group_rule" "lambda_to_proxy" {
   type                     = "egress"
   description              = "PostgreSQL through RDS Proxy only"
@@ -31,6 +37,26 @@ resource "aws_security_group_rule" "lambda_to_proxy" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.lambda_clients.id
   source_security_group_id = aws_security_group.rds_proxy.id
+}
+
+resource "aws_security_group_rule" "lambda_to_secretsmanager_endpoint" {
+  type                     = "egress"
+  description              = "HTTPS to private Secrets Manager endpoint"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.lambda_clients.id
+  source_security_group_id = aws_security_group.secretsmanager_endpoint.id
+}
+
+resource "aws_security_group_rule" "secretsmanager_endpoint_from_lambda" {
+  type                     = "ingress"
+  description              = "HTTPS from Lambda clients"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.secretsmanager_endpoint.id
+  source_security_group_id = aws_security_group.lambda_clients.id
 }
 
 resource "aws_security_group_rule" "proxy_from_lambda" {
@@ -61,6 +87,19 @@ resource "aws_security_group_rule" "postgres_from_proxy" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.postgres.id
   source_security_group_id = aws_security_group.rds_proxy.id
+}
+
+resource "aws_vpc_endpoint" "secretsmanager" {
+  private_dns_enabled = true
+  security_group_ids  = [aws_security_group.secretsmanager_endpoint.id]
+  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  subnet_ids          = var.private_subnet_ids
+  vpc_endpoint_type   = "Interface"
+  vpc_id              = var.vpc_id
+
+  depends_on = [
+    aws_security_group_rule.secretsmanager_endpoint_from_lambda
+  ]
 }
 
 resource "aws_db_subnet_group" "postgres" {

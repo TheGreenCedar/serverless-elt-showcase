@@ -229,7 +229,8 @@ resource "aws_lambda_function" "writer" {
     aws_iam_role_policy.writer_db_secret,
     aws_iam_role_policy.writer_sqs,
     aws_iam_role_policy_attachment.writer_lambda_basic,
-    aws_iam_role_policy_attachment.writer_lambda_vpc
+    aws_iam_role_policy_attachment.writer_lambda_vpc,
+    aws_vpc_endpoint.secretsmanager
   ]
 }
 
@@ -258,7 +259,8 @@ resource "aws_lambda_function" "read_api" {
     aws_cloudwatch_log_group.read_api,
     aws_iam_role_policy.read_api_db_secret,
     aws_iam_role_policy_attachment.read_api_lambda_basic,
-    aws_iam_role_policy_attachment.read_api_lambda_vpc
+    aws_iam_role_policy_attachment.read_api_lambda_vpc,
+    aws_vpc_endpoint.secretsmanager
   ]
 }
 

@@ -43,6 +43,8 @@ SQS protects ingestion durability. If PostgreSQL or RDS Proxy is unavailable aft
 
 API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke Lambda or touch the database; cache misses still pass through bearer-token authorization, throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL. The history route rejects missing dates, offset timestamps, ranges over seven days, and limits over 500.
 
+The read Lambda returns controlled JSON errors for dependency outages. Secrets Manager, RDS Proxy, or PostgreSQL failures become `503` responses and emit a failure metric instead of leaking implementation details through an unshaped Lambda failure.
+
 ## Decision Record
 
 | Decision | Choice | Current status | Why |
@@ -107,7 +109,7 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 
 | File | Command | Result |
 | --- | --- | --- |
-| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 35 tests, 0 failed |
+| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 38 tests, 0 failed |
 | `02-local-postgres-status.txt` | `docker compose ps` | `db` container running and healthy on host port `55432` |
 | `03-terraform-fmt-check.txt` | `terraform -chdir=infra/terraform fmt -check` | Passed |
 | `04-terraform-validate.txt` | `terraform -chdir=infra/terraform validate` | Terraform configuration valid |
@@ -131,10 +133,13 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | API Gateway REST cache | `aws_api_gateway_stage` and method settings | Absorbs repeated reads before Lambda or PostgreSQL are involved. |
 | Query-aware cache key | `aws_api_gateway_integration.fuel_mix_get` | Keeps history cache entries separated by `from`, `to`, `limit`, and `category`. |
 | Lambda authorizer | `aws_api_gateway_authorizer.read_api` | Requires bearer-token authorization before read API execution. |
+| Route-set authorizer policy | `TecFuelMix.ReadApiLambda.Function::Authorize` | Keeps API Gateway authorizer caching from allowing one read route while denying another route for the same valid token. |
 | API key + usage plan throttle | `aws_api_gateway_usage_plan` | Caps external client request rate and burst size. |
 | Read Lambda reserved concurrency | `read_api_reserved_concurrency` | Backstops cache misses so user traffic cannot fan out into unbounded database connections. |
 | RDS Proxy pool limits | `aws_db_proxy_default_target_group.postgres` | Pools Lambda database connections and caps pressure on PostgreSQL. |
+| Private Secrets Manager endpoint | `aws_vpc_endpoint.secretsmanager` | Lets VPC Lambdas retrieve DB credentials without public internet/NAT access. |
 | Private RDS security groups | `infra/terraform/rds.tf` | Allows PostgreSQL traffic only through RDS Proxy from Lambda clients. |
+| Read-only DB grants | `002_roles.sql` | Allows read API routes to read snapshots, readings, and ingestion-run status without writer permissions. |
 | CloudWatch alarms | `infra/terraform/alarms.tf` | Surfaces DLQ backlog, read throttles/errors/latency, queue age, and RDS pressure. |
 
 ## Known Boundaries
@@ -142,5 +147,6 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 - Terraform was validated locally only. No `terraform plan` or `terraform apply` was run against AWS.
 - RDS role grants and schema/bootstrap execution are documented above but were not applied to AWS. Terraform declares database users/secrets for RDS Proxy auth; PostgreSQL still needs the operational bootstrap step during deployment.
 - Local tests use a mix of Docker Compose PostgreSQL on port `55432` and Testcontainers-managed PostgreSQL fixtures; they do not prove AWS networking, IAM, or managed-service behavior.
+- Runtime DB credentials are cached in each warm Lambda execution environment. Rotated Secrets Manager values take effect after environment recycle; production hardening could add refresh-on-auth-failure if rotation frequency required it.
 - Live MISO, live SQS delivery, API Gateway cache hit/miss behavior, and RDS Proxy behavior are not exercised by the local evidence.
 - API Gateway route publishing is represented in Terraform and validated syntactically, but no live deployed REST API was invoked.

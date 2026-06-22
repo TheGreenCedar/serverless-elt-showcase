@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using Amazon.Runtime;
 using AWS.Lambda.Powertools.Logging;
 using AWS.Lambda.Powertools.Metrics;
 using Npgsql;
@@ -53,11 +54,24 @@ public sealed class Function
         _dataSourceFactory = _ => Task.FromResult(dataSource);
     }
 
+    public static Function CreateWithDataSourceFactory(Func<CancellationToken, Task<NpgsqlDataSource>> dataSourceFactory)
+    {
+        return new Function(dataSourceFactory);
+    }
+
+    private Function(Func<CancellationToken, Task<NpgsqlDataSource>> dataSourceFactory)
+    {
+        _dataSourceFactory = dataSourceFactory;
+    }
+
     public APIGatewayCustomAuthorizerResponse Authorize(APIGatewayCustomAuthorizerRequest request, ILambdaContext context)
     {
         var expected = Environment.GetEnvironmentVariable("READ_API_BEARER_TOKEN");
         var actual = BearerToken(request.AuthorizationToken);
         var effect = !string.IsNullOrWhiteSpace(expected) && actual == expected ? "Allow" : "Deny";
+        var resource = effect == "Allow"
+            ? ReadApiRouteSetArn(request.MethodArn)
+            : request.MethodArn;
 
         return new APIGatewayCustomAuthorizerResponse
         {
@@ -71,7 +85,7 @@ public sealed class Function
                     {
                         Action = ["execute-api:Invoke"],
                         Effect = effect,
-                        Resource = [request.MethodArn]
+                        Resource = [resource]
                     }
                 ]
             }
@@ -83,18 +97,31 @@ public sealed class Function
         Metrics.PushSingleMetric("FuelMixReadRequest", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
         using var timeout = CreateInvocationTimeout(context);
 
-        var route = NormalizePath(request.Path);
-        var response = (request.HttpMethod?.ToUpperInvariant(), route) switch
+        try
         {
-            ("GET", "/fuel-mix/latest") => await Latest(timeout.Token),
-            ("GET", "/fuel-mix") => await History(request.QueryStringParameters, timeout.Token),
-            ("GET", "/fuel-mix/categories") => await Categories(timeout.Token),
-            ("GET", "/ingestion-runs/latest") => await LatestIngestionRun(timeout.Token),
-            ("GET", "/health") => Json(HttpStatusCode.OK, new { status = "ok" }),
-            _ => NotFound()
-        };
+            var route = NormalizePath(request.Path);
+            return (request.HttpMethod?.ToUpperInvariant(), route) switch
+            {
+                ("GET", "/fuel-mix/latest") => await Latest(timeout.Token),
+                ("GET", "/fuel-mix") => await History(request.QueryStringParameters, timeout.Token),
+                ("GET", "/fuel-mix/categories") => await Categories(timeout.Token),
+                ("GET", "/ingestion-runs/latest") => await LatestIngestionRun(timeout.Token),
+                ("GET", "/health") => Json(HttpStatusCode.OK, new { status = "ok" }),
+                _ => NotFound()
+            };
+        }
+        catch (Exception ex) when (IsDependencyFailure(ex, timeout.Token))
+        {
+            Metrics.PushSingleMetric("FuelMixReadFailed", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
+            Logger.LogError("Read API dependency failure with {ErrorType}.", ex.GetType().Name);
+            return Json(HttpStatusCode.ServiceUnavailable, new { error = "Read API dependency is unavailable." });
+        }
+    }
 
-        return response;
+    private static bool IsDependencyFailure(Exception ex, CancellationToken cancellationToken)
+    {
+        return ex is AmazonServiceException or NpgsqlException or TimeoutException ||
+            ex is OperationCanceledException && cancellationToken.IsCancellationRequested;
     }
 
     private async Task<APIGatewayProxyResponse> Latest(CancellationToken cancellationToken)
@@ -212,6 +239,24 @@ public sealed class Function
         return authorizationToken?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true
             ? authorizationToken[prefix.Length..]
             : null;
+    }
+
+    private static string ReadApiRouteSetArn(string methodArn)
+    {
+        var arnParts = methodArn.Split(':', 6);
+        if (arnParts.Length != 6)
+        {
+            return methodArn;
+        }
+
+        var resourceParts = arnParts[5].Split('/', 4);
+        if (resourceParts.Length < 2)
+        {
+            return methodArn;
+        }
+
+        var arnPrefix = string.Join(':', arnParts[..5]);
+        return $"{arnPrefix}:{resourceParts[0]}/{resourceParts[1]}/GET/*";
     }
 
     private static APIGatewayProxyResponse NotFound()

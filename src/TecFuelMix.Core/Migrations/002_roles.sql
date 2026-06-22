@@ -32,7 +32,7 @@ grant usage, select
     to fuelmix_writer;
 
 grant select
-    on table fuel_mix_snapshots, fuel_mix_readings
+    on table fuel_mix_snapshots, fuel_mix_readings, ingestion_runs
     to fuelmix_reader;
 
 alter default privileges in schema public

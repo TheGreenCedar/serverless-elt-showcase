@@ -1,6 +1,6 @@
-2026-06-22 17:32:19 -04:00 [INF] Beginning database upgrade
-2026-06-22 17:32:19 -04:00 [INF] Checking whether journal table exists
-2026-06-22 17:32:19 -04:00 [INF] Fetching list of already executed scripts.
-2026-06-22 17:32:19 -04:00 [INF] No new scripts need to be executed - completing.
+2026-06-22 17:44:50 -04:00 [INF] Beginning database upgrade
+2026-06-22 17:44:50 -04:00 [INF] Checking whether journal table exists
+2026-06-22 17:44:50 -04:00 [INF] Fetching list of already executed scripts.
+2026-06-22 17:44:50 -04:00 [INF] No new scripts need to be executed - completing.
 Database migrations applied.
 Role passwords updated.

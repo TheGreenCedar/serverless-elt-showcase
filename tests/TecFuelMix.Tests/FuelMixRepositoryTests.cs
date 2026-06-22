@@ -164,4 +164,26 @@ public sealed class FuelMixRepositoryTests : IClassFixture<PostgresFixture>
         Assert.Equal(newer.SourceRefId, run.SourceRefId);
         Assert.NotNull(run.CompletedAt);
     }
+
+    [Fact]
+    public async Task Reader_role_can_select_latest_ingestion_run_status()
+    {
+        await _postgres.ResetAsync();
+        await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
+
+        var roles = await File.ReadAllTextAsync(Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "TecFuelMix.Core", "Migrations", "002_roles.sql")));
+        await using (var rolesCommand = dataSource.CreateCommand(roles))
+        {
+            await rolesCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = dataSource.CreateCommand("""
+            select has_table_privilege('fuelmix_reader', 'ingestion_runs', 'select');
+            """);
+
+        Assert.True((bool)(await command.ExecuteScalarAsync() ?? false));
+    }
 }
