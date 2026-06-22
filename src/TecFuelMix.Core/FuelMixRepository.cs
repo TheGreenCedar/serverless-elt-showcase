@@ -11,6 +11,50 @@ public sealed class FuelMixRepository
         _dataSource = dataSource;
     }
 
+    public async Task<FuelMixSnapshot?> GetLatestSnapshotAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var snapshotCommand = new NpgsqlCommand("""
+            select id, source_ref_id, interval_est, total_mw, raw_payload::text
+            from fuel_mix_snapshots
+            order by interval_est desc
+            limit 1;
+            """, connection);
+
+        await using var snapshotReader = await snapshotCommand.ExecuteReaderAsync(cancellationToken);
+        if (!await snapshotReader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        var snapshotId = snapshotReader.GetInt64(0);
+        var sourceRefId = snapshotReader.GetString(1);
+        var intervalEst = snapshotReader.GetDateTime(2);
+        var totalMw = snapshotReader.GetDecimal(3);
+        var rawPayload = snapshotReader.GetString(4);
+        await snapshotReader.CloseAsync();
+
+        var readings = new List<FuelMixReading>();
+        await using var readingsCommand = new NpgsqlCommand("""
+            select category, mw, source_label
+            from fuel_mix_readings
+            where snapshot_id = @snapshot_id
+            order by category;
+            """, connection);
+        readingsCommand.Parameters.AddWithValue("snapshot_id", snapshotId);
+
+        await using var readingsReader = await readingsCommand.ExecuteReaderAsync(cancellationToken);
+        while (await readingsReader.ReadAsync(cancellationToken))
+        {
+            readings.Add(new FuelMixReading(
+                readingsReader.GetString(0),
+                readingsReader.GetDecimal(1),
+                readingsReader.GetString(2)));
+        }
+
+        return new FuelMixSnapshot(sourceRefId, intervalEst, totalMw, rawPayload, readings);
+    }
+
     public async Task<long> UpsertSnapshotAsync(FuelMixSnapshot snapshot, CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
