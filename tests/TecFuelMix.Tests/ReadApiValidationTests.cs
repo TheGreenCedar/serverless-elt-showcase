@@ -296,6 +296,27 @@ public sealed class ReadApiValidationTests
     }
 
     [Fact]
+    public void Authorize_with_default_constructor_does_not_require_database_environment()
+    {
+        var function = new Function();
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            AuthorizationToken = "Bearer test-token",
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var token = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+        using var connectionString = new EnvironmentVariableScope("POSTGRES_CONNECTION_STRING", null);
+        using var host = new EnvironmentVariableScope("POSTGRES_HOST", null);
+        using var database = new EnvironmentVariableScope("POSTGRES_DATABASE", null);
+        using var secretArn = new EnvironmentVariableScope("POSTGRES_SECRET_ARN", null);
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("Allow", Effect(response));
+    }
+
+    [Fact]
     public void Authorize_denies_missing_token()
     {
         var function = new Function(null!);

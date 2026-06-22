@@ -10,21 +10,19 @@ namespace TecFuelMix.WriterLambda;
 public sealed class Function
 {
     private static readonly TimeSpan TimeoutSafetyBuffer = TimeSpan.FromSeconds(1);
-    private readonly Task<NpgsqlDataSource> _dataSource;
+    private readonly Func<CancellationToken, Task<NpgsqlDataSource>> _dataSourceFactory;
+    private readonly SemaphoreSlim _dataSourceLock = new(1, 1);
+    private NpgsqlDataSource? _dataSource;
 
     public Function()
-        : this(DatabaseConnectionFactory.CreateAsync(CancellationToken.None))
     {
+        _dataSourceFactory = DatabaseConnectionFactory.CreateAsync;
     }
 
     public Function(NpgsqlDataSource dataSource)
-        : this(Task.FromResult(dataSource))
-    {
-    }
-
-    private Function(Task<NpgsqlDataSource> dataSource)
     {
         _dataSource = dataSource;
+        _dataSourceFactory = _ => Task.FromResult(dataSource);
     }
 
     public async Task<SQSBatchResponse> Handler(SQSEvent evnt, ILambdaContext context)
@@ -32,7 +30,7 @@ public sealed class Function
         using var timeout = CreateInvocationTimeout(context);
         var cancellationToken = timeout.Token;
         var failures = new List<SQSBatchResponse.BatchItemFailure>();
-        var repository = new FuelMixRepository(await _dataSource.WaitAsync(cancellationToken));
+        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
 
         foreach (var record in evnt.Records)
         {
@@ -50,6 +48,31 @@ public sealed class Function
         }
 
         return new SQSBatchResponse(failures);
+    }
+
+    private async Task<NpgsqlDataSource> GetDataSourceAsync(CancellationToken cancellationToken)
+    {
+        if (_dataSource is { } dataSource)
+        {
+            return dataSource;
+        }
+
+        await _dataSourceLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_dataSource is { } cachedDataSource)
+            {
+                return cachedDataSource;
+            }
+
+            dataSource = await _dataSourceFactory(cancellationToken);
+            _dataSource = dataSource;
+            return dataSource;
+        }
+        finally
+        {
+            _dataSourceLock.Release();
+        }
     }
 
     private static CancellationTokenSource CreateInvocationTimeout(ILambdaContext context)
