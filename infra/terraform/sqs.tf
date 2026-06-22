@@ -15,3 +15,7 @@ resource "aws_sqs_queue" "raw_snapshot" {
 resource "aws_sqs_queue" "scheduled_fetch_dlq" {
   name = "${var.project_name}-scheduled-fetch-dlq"
 }
+
+resource "aws_sqs_queue" "fetch_async_failure_dlq" {
+  name = "${var.project_name}-fetch-async-failure-dlq"
+}

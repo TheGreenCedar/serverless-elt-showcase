@@ -70,6 +70,22 @@ resource "aws_iam_role_policy" "fetch_sqs" {
   })
 }
 
+resource "aws_iam_role_policy" "fetch_async_failure_destination" {
+  name = "${var.project_name}-fetch-async-failure-destination"
+  role = aws_iam_role.fetch_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.fetch_async_failure_dlq.arn
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "writer_sqs" {
   name = "${var.project_name}-writer-sqs"
   role = aws_iam_role.writer_lambda.id
@@ -102,6 +118,19 @@ resource "aws_lambda_function" "fetch" {
   environment {
     variables = {
       RAW_SNAPSHOT_QUEUE_URL = aws_sqs_queue.raw_snapshot.url
+    }
+  }
+}
+
+resource "aws_lambda_function_event_invoke_config" "fetch" {
+  function_name = aws_lambda_function.fetch.function_name
+
+  maximum_event_age_in_seconds = 60
+  maximum_retry_attempts       = 0
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.fetch_async_failure_dlq.arn
     }
   }
 }

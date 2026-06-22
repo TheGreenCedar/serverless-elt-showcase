@@ -122,8 +122,10 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 
 | Control | Where | Why it exists |
 | --- | --- | --- |
-| One-minute schedule with zero Scheduler retries | `aws_scheduler_schedule.fetch` | Meets the source polling limit and prevents EventBridge Scheduler from re-invoking the MISO fetch inside the same minute after a downstream publish failure. |
+| One-minute schedule with zero Scheduler retries | `aws_scheduler_schedule.fetch` | Keeps EventBridge Scheduler from re-submitting a failed scheduled invocation. |
+| Fetch async retries disabled with 60-second event age | `aws_lambda_function_event_invoke_config.fetch` | Meets the source polling limit by preventing Lambda async retries from re-running the MISO fetch after a post-GET failure. |
 | Fetch reserved concurrency `1` | `aws_lambda_function.fetch` | Prevents overlapping MISO fetches from the scheduled path. |
+| Fetch async failure DLQ + alarms | `aws_sqs_queue.fetch_async_failure_dlq` and fetch alarms | Preserves terminal async invoke failure details and surfaces fetch failures without re-polling MISO. |
 | SQS raw snapshot queue + DLQ | `aws_sqs_queue.raw_snapshot` | Decouples MISO fetch success from database availability and preserves failed writes for retry/redrive. |
 | Writer reserved concurrency `1` | `aws_lambda_function.writer` | Keeps database write pressure predictable. |
 | Partial batch failure | SQS event source mapping and writer response | Retries only failed SQS records instead of replaying a whole successful batch. |
