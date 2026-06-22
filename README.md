@@ -7,6 +7,7 @@ C#/.NET implementation of a serverless ELT flow for MISO real-time fuel mix data
 This README and `docs/evidence/` are the canonical evaluator-facing implementation and verification surfaces. The planning files below are non-canonical context: they explain earlier design reasoning and task sequencing, but they may include superseded plan steps or evidence targets.
 
 - [planning/tec-fuelmix-plan.md](planning/tec-fuelmix-plan.md): architecture reasoning, scale decisions, data model, and interview talking points.
+- [planning/TEC_SeniorEng_TechnicalTest.md](planning/TEC_SeniorEng_TechnicalTest.md): original challenge brief preserved beside the implementation plans.
 - [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
 - [planning/2026-06-22-tec-fuelmix-full-submission-hardening.md](planning/2026-06-22-tec-fuelmix-full-submission-hardening.md): final hardening plan used to drive the broad implementation pass.
 - [planning/2026-06-22-parallel-worktree-execution-plan.md](planning/2026-06-22-parallel-worktree-execution-plan.md): parallel worktree execution plan used to split and review the later tasks.
@@ -41,7 +42,7 @@ The fetch path and write path are intentionally separate:
 
 SQS protects ingestion durability. If PostgreSQL or RDS Proxy is unavailable after MISO returns a snapshot, the raw payload remains queued for retry and eventual DLQ handling. PostgreSQL unique keys keep duplicate SQS deliveries from creating duplicate snapshots or readings.
 
-API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke Lambda or touch the database; cache misses still pass through bearer-token authorization, throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL. The history route rejects missing dates, offset timestamps, ranges over seven days, and limits over 500.
+API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke the read integration Lambda or touch PostgreSQL; authorizer Lambda invocation depends on API Gateway authorizer cache state. Cache misses still pass through bearer-token authorization, throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL. The history route rejects missing dates, offset timestamps, ranges over seven days, and limits over 500.
 
 The read Lambda returns controlled JSON errors for dependency outages. Secrets Manager, RDS Proxy, or PostgreSQL failures become `503` responses and emit a failure metric instead of leaking implementation details through an unshaped Lambda failure.
 
