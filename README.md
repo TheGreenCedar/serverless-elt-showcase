@@ -22,21 +22,24 @@ flowchart LR
     Writer -->|idempotent upsert| Proxy[RDS Proxy]
     Proxy --> Db[(PostgreSQL)]
 
-    User[External reader] --> Api[API Gateway REST API<br/>API key + cache + throttle]
+    User[External reader] --> Api[API Gateway REST API<br/>bearer authorizer + API key + cache]
+    Api --> Auth[Authorizer Lambda<br/>bearer token]
     Api -->|cache miss| Read[Read API Lambda<br/>reserved concurrency cap]
     Read --> Proxy
     Api -->|cache hit| Cached[Cached JSON response]
+    Secrets[Secrets Manager<br/>writer/read DB users] --> Writer
+    Secrets --> Read
 ```
 
 The fetch path and write path are intentionally separate:
 
 - `TecFuelMix.FetchLambda` is scheduled once per minute. It only calls MISO and publishes the raw payload to SQS through `RAW_SNAPSHOT_QUEUE_URL`.
-- `TecFuelMix.WriterLambda` consumes SQS messages and idempotently writes PostgreSQL through `POSTGRES_CONNECTION_STRING`.
-- `TecFuelMix.ReadApiLambda` reads PostgreSQL through `POSTGRES_CONNECTION_STRING` and returns the latest ingested snapshot at `/fuel-mix/latest`. That endpoint is latest-only and rejects query parameters; historical filtering is not implemented in this slice.
+- `TecFuelMix.WriterLambda` consumes SQS messages and idempotently writes PostgreSQL. Local runs may use `POSTGRES_CONNECTION_STRING`; AWS uses `POSTGRES_HOST`, `POSTGRES_DATABASE`, and `POSTGRES_SECRET_ARN` with Secrets Manager credentials.
+- `TecFuelMix.ReadApiLambda` reads PostgreSQL through the same local fallback/AWS secret pattern and exposes bounded read routes: `GET /fuel-mix/latest`, `GET /fuel-mix?from=...&to=...&limit=...&category=...`, `GET /fuel-mix/categories`, `GET /ingestion-runs/latest`, and `GET /health`.
 
 SQS protects ingestion durability. If PostgreSQL or RDS Proxy is unavailable after MISO returns a snapshot, the raw payload remains queued for retry and eventual DLQ handling. PostgreSQL unique keys keep duplicate SQS deliveries from creating duplicate snapshots or readings.
 
-API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke Lambda or touch the database; cache misses still pass through throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL.
+API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency, and RDS Proxy protect PostgreSQL from external read traffic. Cache hits do not invoke Lambda or touch the database; cache misses still pass through bearer-token authorization, throttles, a Lambda concurrency cap, pooled proxy connections, and bounded SQL. The history route rejects missing dates, offset timestamps, ranges over seven days, and limits over 500.
 
 ## Decision Record
 
@@ -44,12 +47,13 @@ API Gateway cache, API Gateway usage-plan throttles, Lambda reserved concurrency
 | --- | --- | --- | --- |
 | Ingestion compute | Scheduled Lambda | Implemented in Terraform as EventBridge Scheduler -> fetch Lambda. | Short scheduled job, explicit one-minute cadence, no idle service. |
 | Write buffering | SQS + DLQ | Implemented in Terraform and Lambda wiring. | Preserves fetched payloads when PostgreSQL is unavailable. |
-| Read compute | API Gateway + Lambda | Implemented for `GET /fuel-mix/latest`. | Small operational surface; cache/throttle/concurrency controls protect the database. |
+| Read compute | API Gateway + Lambda | Implemented for latest, bounded history, categories, latest ingestion run, and health routes. | Small operational surface; cache/throttle/concurrency controls protect the database. |
 | Database protection | API cache + reserved concurrency + RDS Proxy | Implemented in Terraform; live AWS behavior not exercised locally. | Stops repeated reads early and caps connection pressure on PostgreSQL. |
 | Data access | Npgsql/raw SQL | Implemented in `TecFuelMix.Core`. | Upsert/idempotency is PostgreSQL-specific and small; EF Core would add ceremony here. |
 | Migrations | DbUp console migrator | Implemented for schema, role bootstrap, grants, and optional app-role password rotation. | SQL-first migrations fit the existing schema and make bootstrap rerunnable. |
-| Auth | Lambda authorizer + API key usage plan | Lambda authorizer is a planned hardening target; current Terraform uses API key usage plan throttling. | Bearer token should be auth; API key should be throttle/quota only. |
+| Auth | Lambda authorizer + API key usage plan | Implemented in Terraform and `TecFuelMix.ReadApiLambda.Function::Authorize`. | Bearer token handles auth; API key handles throttle/quota. |
 | Infrastructure as code | Terraform only | Implemented; no CDK stack is published. | Avoids duplicate Terraform/CDK stacks while still publishing infrastructure as code. |
+| Runtime telemetry | AWS Lambda Powertools metrics/logging | Implemented in fetch, writer, and read API Lambdas. | Gives CloudWatch signal without custom telemetry plumbing. |
 
 ## Local Verification
 
@@ -70,6 +74,7 @@ Run the local proof commands:
 ```powershell
 dotnet test .\TecFuelMix.sln
 docker compose ps
+terraform -chdir=infra/terraform fmt -check
 terraform -chdir=infra/terraform validate
 ```
 
@@ -100,12 +105,14 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 
 | File | Command | Result |
 | --- | --- | --- |
-| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 13 tests, 0 failed |
+| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 35 tests, 0 failed |
 | `02-local-postgres-status.txt` | `docker compose ps` | `db` container running and healthy on host port `55432` |
-| `03-terraform-validate.txt` | `terraform -chdir=infra/terraform validate` | Terraform configuration valid |
-| `04-docker-fetch-build.txt` | Fetch Lambda Docker build | Image `tec-fuelmix-fetch:latest` built |
-| `05-docker-writer-build.txt` | Writer Lambda Docker build | Image `tec-fuelmix-writer:latest` built |
-| `06-docker-read-api-build.txt` | Read API Lambda Docker build | Image `tec-fuelmix-read-api:latest` built |
+| `03-terraform-fmt-check.txt` | `terraform -chdir=infra/terraform fmt -check` | Passed |
+| `04-terraform-validate.txt` | `terraform -chdir=infra/terraform validate` | Terraform configuration valid |
+| `05-docker-fetch-build.txt` | Fetch Lambda Docker build | Image `tec-fuelmix-fetch:latest` built |
+| `06-docker-writer-build.txt` | Writer Lambda Docker build | Image `tec-fuelmix-writer:latest` built |
+| `07-docker-read-api-build.txt` | Read API Lambda Docker build | Image `tec-fuelmix-read-api:latest` built |
+| `08-dbup-migrator.txt` | DbUp migrator against local PostgreSQL | Migrations applied; role passwords updated |
 
 ## Scale And Safety Controls
 
@@ -120,15 +127,18 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | Partial batch failure | SQS event source mapping and writer response | Retries only failed SQS records instead of replaying a whole successful batch. |
 | PostgreSQL unique keys | `src/TecFuelMix.Core/Schema.sql` | Makes duplicate delivery safe by enforcing one snapshot per `source_ref_id` and one reading per snapshot/category. |
 | API Gateway REST cache | `aws_api_gateway_stage` and method settings | Absorbs repeated reads before Lambda or PostgreSQL are involved. |
+| Query-aware cache key | `aws_api_gateway_integration.fuel_mix_get` | Keeps history cache entries separated by `from`, `to`, `limit`, and `category`. |
+| Lambda authorizer | `aws_api_gateway_authorizer.read_api` | Requires bearer-token authorization before read API execution. |
 | API key + usage plan throttle | `aws_api_gateway_usage_plan` | Caps external client request rate and burst size. |
 | Read Lambda reserved concurrency | `read_api_reserved_concurrency` | Backstops cache misses so user traffic cannot fan out into unbounded database connections. |
 | RDS Proxy pool limits | `aws_db_proxy_default_target_group.postgres` | Pools Lambda database connections and caps pressure on PostgreSQL. |
 | Private RDS security groups | `infra/terraform/rds.tf` | Allows PostgreSQL traffic only through RDS Proxy from Lambda clients. |
+| CloudWatch alarms | `infra/terraform/alarms.tf` | Surfaces DLQ backlog, read throttles/errors/latency, queue age, and RDS pressure. |
 
 ## Known Boundaries
 
 - Terraform was validated locally only. No `terraform plan` or `terraform apply` was run against AWS.
 - RDS role grants and schema/bootstrap execution are documented above but were not applied to AWS. Terraform declares database users/secrets for RDS Proxy auth; PostgreSQL still needs the operational bootstrap step during deployment.
-- Lambda runtime secret retrieval is a follow-up. The current app reads full PostgreSQL connection strings from environment variables.
+- Local tests use a mix of Docker Compose PostgreSQL on port `55432` and Testcontainers-managed PostgreSQL fixtures; they do not prove AWS networking, IAM, or managed-service behavior.
 - Live MISO, live SQS delivery, API Gateway cache hit/miss behavior, and RDS Proxy behavior are not exercised by the local evidence.
-- Local tests use Docker Compose PostgreSQL on port `55432`; they do not prove AWS networking, IAM, or managed-service behavior.
+- API Gateway route publishing is represented in Terraform and validated syntactically, but no live deployed REST API was invoked.

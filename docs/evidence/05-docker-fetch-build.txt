@@ -1,0 +1,66 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 402B 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
+#2 DONE 0.3s
+
+#3 [internal] load metadata for public.ecr.aws/lambda/dotnet:10
+#3 DONE 0.6s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 275B done
+#4 DONE 0.1s
+
+#5 [internal] load build context
+#5 DONE 0.0s
+
+#6 [base 1/1] FROM public.ecr.aws/lambda/dotnet:10@sha256:3ec97320c51f150aa53652bc3fd3287fb228b61079245d9be305a6987ff50df8
+#6 resolve public.ecr.aws/lambda/dotnet:10@sha256:3ec97320c51f150aa53652bc3fd3287fb228b61079245d9be305a6987ff50df8 0.1s done
+#6 DONE 0.1s
+
+#7 [build 1/4] FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
+#7 resolve mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3 0.1s done
+#7 DONE 0.1s
+
+#5 [internal] load build context
+#5 transferring context: 133.74kB 0.1s done
+#5 DONE 0.2s
+
+#8 [build 2/4] WORKDIR /src
+#8 CACHED
+
+#9 [build 3/4] COPY . .
+#9 DONE 0.1s
+
+#10 [build 4/4] RUN dotnet publish src/TecFuelMix.FetchLambda/TecFuelMix.FetchLambda.csproj -c Release -o /app/publish
+#10 1.553   Determining projects to restore...
+#10 3.960   Restored /src/src/TecFuelMix.Core/TecFuelMix.Core.csproj (in 1.9 sec).
+#10 6.140   Restored /src/src/TecFuelMix.FetchLambda/TecFuelMix.FetchLambda.csproj (in 4.1 sec).
+#10 8.744   TecFuelMix.Core -> /src/src/TecFuelMix.Core/bin/Release/net10.0/TecFuelMix.Core.dll
+#10 9.330   AspectInjector|2.8.1: Found 0 aspects, 0 injections
+#10 9.359   TecFuelMix.FetchLambda -> /src/src/TecFuelMix.FetchLambda/bin/Release/net10.0/TecFuelMix.FetchLambda.dll
+#10 9.389   TecFuelMix.FetchLambda -> /app/publish/
+#10 DONE 9.6s
+
+#11 [final 1/2] WORKDIR /var/task
+#11 CACHED
+
+#12 [final 2/2] COPY --from=build /app/publish .
+#12 DONE 0.1s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 0.4s done
+#13 exporting manifest sha256:cdfefd4503d261bf56df3098de342c1742eef7aa4ec15f7c02bc7eaa978eb2a0 0.0s done
+#13 exporting config sha256:f73989948f1a629fee34d5ade2cd58d927cbf625dd22119986a12dcc6ba41ac2 0.1s done
+#13 exporting attestation manifest sha256:f9552b85211e2efae1778cad1aba470ef885754bac7ff28cd08a83d30ecfc9ca 0.1s done
+#13 exporting manifest list sha256:0cc5a53077b92bd7817edbfffedf3f066fc9bbc8b34878b79b91d91b3a5d9282
+#13 exporting manifest list sha256:0cc5a53077b92bd7817edbfffedf3f066fc9bbc8b34878b79b91d91b3a5d9282 0.0s done
+#13 naming to docker.io/library/tec-fuelmix-fetch:latest done
+#13 unpacking to docker.io/library/tec-fuelmix-fetch:latest 0.1s done
+#13 DONE 0.8s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/px5cugmm2nl0udksuhrw82np7
