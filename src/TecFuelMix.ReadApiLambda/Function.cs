@@ -126,7 +126,7 @@ public sealed class Function
 
     private async Task<APIGatewayProxyResponse> Latest(CancellationToken cancellationToken)
     {
-        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var repository = await CreateRepositoryAsync(cancellationToken);
         var snapshot = await repository.GetLatestSnapshotAsync(cancellationToken);
         if (snapshot is null)
         {
@@ -181,7 +181,7 @@ public sealed class Function
         var category = query?.TryGetValue("category", out var categoryText) == true
             ? categoryText.Trim()
             : null;
-        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var repository = await CreateRepositoryAsync(cancellationToken);
         var rows = await repository.QueryHistoryAsync(
             from,
             to,
@@ -194,18 +194,23 @@ public sealed class Function
 
     private async Task<APIGatewayProxyResponse> Categories(CancellationToken cancellationToken)
     {
-        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var repository = await CreateRepositoryAsync(cancellationToken);
         var categories = await repository.GetCategoriesAsync(cancellationToken);
         return Json(HttpStatusCode.OK, categories);
     }
 
     private async Task<APIGatewayProxyResponse> LatestIngestionRun(CancellationToken cancellationToken)
     {
-        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var repository = await CreateRepositoryAsync(cancellationToken);
         var run = await repository.GetLatestIngestionRunAsync(cancellationToken);
         return run is null
             ? Json(HttpStatusCode.NotFound, new { error = "No ingestion run found." })
             : Json(HttpStatusCode.OK, run);
+    }
+
+    private async Task<FuelMixRepository> CreateRepositoryAsync(CancellationToken cancellationToken)
+    {
+        return new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
     }
 
     private async Task<NpgsqlDataSource> GetDataSourceAsync(CancellationToken cancellationToken)

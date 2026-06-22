@@ -20,15 +20,12 @@ public sealed class ReadApiValidationTests
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix/latest",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await function.Handler(Request(
+            "/fuel-mix/latest",
+            new Dictionary<string, string>
             {
                 ["ignored"] = "ok"
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(200, response.StatusCode);
         Assert.Contains(snapshot.SourceRefId, response.Body);
@@ -40,11 +37,7 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix"
-        }, null!);
+        var response = await function.Handler(Request("/fuel-mix"), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("from", response.Body);
@@ -63,12 +56,7 @@ public sealed class ReadApiValidationTests
         };
         query[key] = value;
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = query
-        }, null!);
+        var response = await function.Handler(Request("/fuel-mix", query), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains(key, response.Body);
@@ -83,16 +71,13 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await function.Handler(Request(
+            "/fuel-mix",
+            new Dictionary<string, string>
             {
                 ["from"] = from,
                 ["to"] = "2026-06-02T00:00:00"
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("source-local", response.Body);
@@ -105,16 +90,13 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await function.Handler(Request(
+            "/fuel-mix",
+            new Dictionary<string, string>
             {
                 ["from"] = "2026-06-01T00:00:00",
                 ["to"] = to
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("after", response.Body);
@@ -125,16 +107,13 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await function.Handler(Request(
+            "/fuel-mix",
+            new Dictionary<string, string>
             {
                 ["from"] = "2026-06-01T00:00:00",
                 ["to"] = "2026-06-09T00:00:00"
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("7 days", response.Body);
@@ -145,17 +124,14 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await function.Handler(Request(
+            "/fuel-mix",
+            new Dictionary<string, string>
             {
                 ["from"] = "2026-06-01T00:00:00",
                 ["to"] = "2026-06-02T00:00:00",
                 ["limit"] = "501"
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("500", response.Body);
@@ -183,16 +159,13 @@ public sealed class ReadApiValidationTests
             }, CancellationToken.None);
         }
 
-        var response = await new Function(dataSource).Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix",
-            QueryStringParameters = new Dictionary<string, string>
+        var response = await new Function(dataSource).Handler(Request(
+            "/fuel-mix",
+            new Dictionary<string, string>
             {
                 ["from"] = start.AddMinutes(-1).ToString("O"),
                 ["to"] = start.AddMinutes(102).ToString("O")
-            }
-        }, null!);
+            }), null!);
 
         Assert.Equal(200, response.StatusCode);
         using var document = JsonDocument.Parse(response.Body);
@@ -208,11 +181,7 @@ public sealed class ReadApiValidationTests
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix/categories"
-        }, null!);
+        var response = await function.Handler(Request("/fuel-mix/categories"), null!);
 
         Assert.Equal(200, response.StatusCode);
         Assert.Contains("Battery Storage", response.Body);
@@ -228,11 +197,7 @@ public sealed class ReadApiValidationTests
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/ingestion-runs/latest"
-        }, null!);
+        var response = await function.Handler(Request("/ingestion-runs/latest"), null!);
 
         Assert.Equal(200, response.StatusCode);
         Assert.Contains("succeeded", response.Body);
@@ -244,11 +209,7 @@ public sealed class ReadApiValidationTests
     {
         var function = new Function(null!);
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/health"
-        }, null!);
+        var response = await function.Handler(Request("/health"), null!);
 
         Assert.Equal(200, response.StatusCode);
         Assert.Contains("ok", response.Body);
@@ -265,7 +226,8 @@ public sealed class ReadApiValidationTests
             "..",
             "src",
             "TecFuelMix.Core",
-            "Schema.sql");
+            "Migrations",
+            "001_schema.sql");
         var schema = await File.ReadAllTextAsync(schemaPath);
         await using (var schemaCommand = dataSource.CreateCommand(schema))
         {
@@ -393,16 +355,24 @@ public sealed class ReadApiValidationTests
         return response.PolicyDocument.Statement.Single().Resource.Single();
     }
 
+    private static APIGatewayProxyRequest Request(
+        string path,
+        IDictionary<string, string>? query = null)
+    {
+        return new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = path,
+            QueryStringParameters = query
+        };
+    }
+
     [Fact]
     public async Task Handler_returns_503_for_dependency_failure()
     {
         var function = Function.CreateWithDataSourceFactory(_ => throw new TimeoutException("database unavailable"));
 
-        var response = await function.Handler(new APIGatewayProxyRequest
-        {
-            HttpMethod = "GET",
-            Path = "/fuel-mix/latest"
-        }, null!);
+        var response = await function.Handler(Request("/fuel-mix/latest"), null!);
 
         Assert.Equal(503, response.StatusCode);
         Assert.Contains("unavailable", response.Body);
@@ -412,10 +382,7 @@ public sealed class ReadApiValidationTests
     public async Task Handler_returns_404_for_unknown_route()
     {
         var function = new Function(null!);
-        var request = new APIGatewayProxyRequest
-        {
-            Path = "/fuel-mix/unknown"
-        };
+        var request = Request("/fuel-mix/unknown");
 
         var response = await function.Handler(request, null!);
 

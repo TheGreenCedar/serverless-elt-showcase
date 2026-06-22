@@ -130,7 +130,7 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | SQS raw snapshot queue + DLQ | `aws_sqs_queue.raw_snapshot` | Decouples MISO fetch success from database availability and preserves failed writes for retry/redrive. |
 | Writer reserved concurrency `1` | `aws_lambda_function.writer` | Keeps database write pressure predictable. |
 | Partial batch failure | SQS event source mapping and writer response | Retries only failed SQS records instead of replaying a whole successful batch. |
-| PostgreSQL unique keys | `src/TecFuelMix.Core/Schema.sql` | Makes duplicate delivery safe by enforcing one snapshot per `source_ref_id` and one reading per snapshot/category. |
+| PostgreSQL unique keys | `src/TecFuelMix.Core/Migrations/001_schema.sql` | Makes duplicate delivery safe by enforcing one snapshot per `source_ref_id` and one reading per snapshot/category. |
 | API Gateway REST cache | `aws_api_gateway_stage` and method settings | Absorbs repeated reads before Lambda or PostgreSQL are involved. |
 | Query-aware cache key | `aws_api_gateway_integration.fuel_mix_get` | Keeps history cache entries separated by `from`, `to`, `limit`, and `category`. |
 | Lambda authorizer | `aws_api_gateway_authorizer.read_api` | Requires bearer-token authorization before read API execution. |
