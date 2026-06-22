@@ -14,6 +14,30 @@ resource "aws_api_gateway_resource" "latest" {
   rest_api_id = aws_api_gateway_rest_api.read_api.id
 }
 
+resource "aws_api_gateway_resource" "categories" {
+  parent_id   = aws_api_gateway_resource.fuel_mix.id
+  path_part   = "categories"
+  rest_api_id = aws_api_gateway_rest_api.read_api.id
+}
+
+resource "aws_api_gateway_resource" "ingestion_runs" {
+  parent_id   = aws_api_gateway_rest_api.read_api.root_resource_id
+  path_part   = "ingestion-runs"
+  rest_api_id = aws_api_gateway_rest_api.read_api.id
+}
+
+resource "aws_api_gateway_resource" "ingestion_runs_latest" {
+  parent_id   = aws_api_gateway_resource.ingestion_runs.id
+  path_part   = "latest"
+  rest_api_id = aws_api_gateway_rest_api.read_api.id
+}
+
+resource "aws_api_gateway_resource" "health" {
+  parent_id   = aws_api_gateway_rest_api.read_api.root_resource_id
+  path_part   = "health"
+  rest_api_id = aws_api_gateway_rest_api.read_api.id
+}
+
 resource "aws_api_gateway_authorizer" "read_api" {
   name                             = "${var.project_name}-read-api-bearer"
   rest_api_id                      = aws_api_gateway_rest_api.read_api.id
@@ -32,6 +56,49 @@ resource "aws_api_gateway_method" "latest_get" {
   rest_api_id      = aws_api_gateway_rest_api.read_api.id
 }
 
+resource "aws_api_gateway_method" "fuel_mix_get" {
+  api_key_required = true
+  authorization    = "CUSTOM"
+  authorizer_id    = aws_api_gateway_authorizer.read_api.id
+  http_method      = "GET"
+  resource_id      = aws_api_gateway_resource.fuel_mix.id
+  rest_api_id      = aws_api_gateway_rest_api.read_api.id
+
+  request_parameters = {
+    "method.request.querystring.category" = false
+    "method.request.querystring.from"     = false
+    "method.request.querystring.limit"    = false
+    "method.request.querystring.to"       = false
+  }
+}
+
+resource "aws_api_gateway_method" "categories_get" {
+  api_key_required = true
+  authorization    = "CUSTOM"
+  authorizer_id    = aws_api_gateway_authorizer.read_api.id
+  http_method      = "GET"
+  resource_id      = aws_api_gateway_resource.categories.id
+  rest_api_id      = aws_api_gateway_rest_api.read_api.id
+}
+
+resource "aws_api_gateway_method" "ingestion_runs_latest_get" {
+  api_key_required = true
+  authorization    = "CUSTOM"
+  authorizer_id    = aws_api_gateway_authorizer.read_api.id
+  http_method      = "GET"
+  resource_id      = aws_api_gateway_resource.ingestion_runs_latest.id
+  rest_api_id      = aws_api_gateway_rest_api.read_api.id
+}
+
+resource "aws_api_gateway_method" "health_get" {
+  api_key_required = true
+  authorization    = "CUSTOM"
+  authorizer_id    = aws_api_gateway_authorizer.read_api.id
+  http_method      = "GET"
+  resource_id      = aws_api_gateway_resource.health.id
+  rest_api_id      = aws_api_gateway_rest_api.read_api.id
+}
+
 resource "aws_api_gateway_integration" "latest_get" {
   http_method             = aws_api_gateway_method.latest_get.http_method
   integration_http_method = "POST"
@@ -41,11 +108,54 @@ resource "aws_api_gateway_integration" "latest_get" {
   uri                     = aws_lambda_function.read_api.invoke_arn
 }
 
+resource "aws_api_gateway_integration" "fuel_mix_get" {
+  http_method             = aws_api_gateway_method.fuel_mix_get.http_method
+  integration_http_method = "POST"
+  resource_id             = aws_api_gateway_resource.fuel_mix.id
+  rest_api_id             = aws_api_gateway_rest_api.read_api.id
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.read_api.invoke_arn
+
+  cache_key_parameters = [
+    "method.request.querystring.category",
+    "method.request.querystring.from",
+    "method.request.querystring.limit",
+    "method.request.querystring.to"
+  ]
+}
+
+resource "aws_api_gateway_integration" "categories_get" {
+  http_method             = aws_api_gateway_method.categories_get.http_method
+  integration_http_method = "POST"
+  resource_id             = aws_api_gateway_resource.categories.id
+  rest_api_id             = aws_api_gateway_rest_api.read_api.id
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.read_api.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "ingestion_runs_latest_get" {
+  http_method             = aws_api_gateway_method.ingestion_runs_latest_get.http_method
+  integration_http_method = "POST"
+  resource_id             = aws_api_gateway_resource.ingestion_runs_latest.id
+  rest_api_id             = aws_api_gateway_rest_api.read_api.id
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.read_api.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "health_get" {
+  http_method             = aws_api_gateway_method.health_get.http_method
+  integration_http_method = "POST"
+  resource_id             = aws_api_gateway_resource.health.id
+  rest_api_id             = aws_api_gateway_rest_api.read_api.id
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.read_api.invoke_arn
+}
+
 resource "aws_lambda_permission" "api_gateway_read" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.read_api.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.read_api.execution_arn}/*/${aws_api_gateway_method.latest_get.http_method}${aws_api_gateway_resource.latest.path}"
+  source_arn    = "${aws_api_gateway_rest_api.read_api.execution_arn}/*/*"
   statement_id  = "AllowApiGatewayInvoke"
 }
 
@@ -63,9 +173,20 @@ resource "aws_api_gateway_deployment" "read_api" {
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.latest.id,
+      aws_api_gateway_resource.categories.id,
+      aws_api_gateway_resource.ingestion_runs_latest.id,
+      aws_api_gateway_resource.health.id,
       aws_api_gateway_authorizer.read_api.id,
       aws_api_gateway_method.latest_get.id,
+      aws_api_gateway_method.fuel_mix_get.id,
+      aws_api_gateway_method.categories_get.id,
+      aws_api_gateway_method.ingestion_runs_latest_get.id,
+      aws_api_gateway_method.health_get.id,
       aws_api_gateway_integration.latest_get.id,
+      aws_api_gateway_integration.fuel_mix_get.id,
+      aws_api_gateway_integration.categories_get.id,
+      aws_api_gateway_integration.ingestion_runs_latest_get.id,
+      aws_api_gateway_integration.health_get.id,
       aws_lambda_permission.api_gateway_authorizer.id,
       aws_lambda_permission.api_gateway_read.id
     ]))
@@ -76,6 +197,10 @@ resource "aws_api_gateway_deployment" "read_api" {
   }
 
   depends_on = [
+    aws_api_gateway_integration.categories_get,
+    aws_api_gateway_integration.fuel_mix_get,
+    aws_api_gateway_integration.health_get,
+    aws_api_gateway_integration.ingestion_runs_latest_get,
     aws_api_gateway_integration.latest_get,
     aws_lambda_permission.api_gateway_authorizer,
     aws_lambda_permission.api_gateway_read
@@ -90,8 +215,8 @@ resource "aws_api_gateway_stage" "prod" {
   stage_name            = "prod"
 }
 
-resource "aws_api_gateway_method_settings" "latest_get" {
-  method_path = "${trimprefix(aws_api_gateway_resource.latest.path, "/")}/${aws_api_gateway_method.latest_get.http_method}"
+resource "aws_api_gateway_method_settings" "all_get" {
+  method_path = "*/*"
   rest_api_id = aws_api_gateway_rest_api.read_api.id
   stage_name  = aws_api_gateway_stage.prod.stage_name
 
