@@ -15,6 +15,14 @@ public sealed class Function
     private const int DefaultLimit = 100;
     private const int MaxLimit = 500;
     private const int MaxRangeDays = 7;
+    private static readonly string[] SourceLocalDateFormats =
+    [
+        "yyyy-MM-dd'T'HH:mm",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF",
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd HH:mm:ss"
+    ];
     private static readonly TimeSpan TimeoutSafetyBuffer = TimeSpan.FromSeconds(1);
     private static readonly JsonSerializerOptions ResponseJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] KnownRoutes =
@@ -26,16 +34,44 @@ public sealed class Function
         "/health"
     ];
 
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly Func<CancellationToken, Task<NpgsqlDataSource>> _dataSourceFactory;
+    private readonly SemaphoreSlim _dataSourceLock = new(1, 1);
+    private NpgsqlDataSource? _dataSource;
 
     public Function()
-        : this(NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("POSTGRES_CONNECTION_STRING") ?? ""))
     {
+        _dataSourceFactory = DatabaseConnectionFactory.CreateAsync;
     }
 
     public Function(NpgsqlDataSource dataSource)
     {
         _dataSource = dataSource;
+        _dataSourceFactory = _ => Task.FromResult(dataSource);
+    }
+
+    public APIGatewayCustomAuthorizerResponse Authorize(APIGatewayCustomAuthorizerRequest request, ILambdaContext context)
+    {
+        var expected = Environment.GetEnvironmentVariable("READ_API_BEARER_TOKEN");
+        var actual = BearerToken(request.AuthorizationToken);
+        var effect = !string.IsNullOrWhiteSpace(expected) && actual == expected ? "Allow" : "Deny";
+
+        return new APIGatewayCustomAuthorizerResponse
+        {
+            PrincipalID = "external-reader",
+            PolicyDocument = new APIGatewayCustomAuthorizerPolicy
+            {
+                Version = "2012-10-17",
+                Statement =
+                [
+                    new APIGatewayCustomAuthorizerPolicy.IAMPolicyStatement
+                    {
+                        Action = ["execute-api:Invoke"],
+                        Effect = effect,
+                        Resource = [request.MethodArn]
+                    }
+                ]
+            }
+        };
     }
 
     public async Task<APIGatewayProxyResponse> Handler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -55,7 +91,8 @@ public sealed class Function
 
     private async Task<APIGatewayProxyResponse> Latest(CancellationToken cancellationToken)
     {
-        var snapshot = await Repository().GetLatestSnapshotAsync(cancellationToken);
+        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var snapshot = await repository.GetLatestSnapshotAsync(cancellationToken);
         return snapshot is null
             ? Json(HttpStatusCode.NotFound, new { error = "No fuel mix snapshot found." })
             : Json(HttpStatusCode.OK, snapshot);
@@ -96,7 +133,8 @@ public sealed class Function
         var category = query?.TryGetValue("category", out var categoryText) == true
             ? categoryText.Trim()
             : null;
-        var rows = await Repository().QueryHistoryAsync(
+        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var rows = await repository.QueryHistoryAsync(
             from,
             to,
             string.IsNullOrWhiteSpace(category) ? null : category,
@@ -108,19 +146,52 @@ public sealed class Function
 
     private async Task<APIGatewayProxyResponse> Categories(CancellationToken cancellationToken)
     {
-        var categories = await Repository().GetCategoriesAsync(cancellationToken);
+        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var categories = await repository.GetCategoriesAsync(cancellationToken);
         return Json(HttpStatusCode.OK, categories);
     }
 
     private async Task<APIGatewayProxyResponse> LatestIngestionRun(CancellationToken cancellationToken)
     {
-        var run = await Repository().GetLatestIngestionRunAsync(cancellationToken);
+        var repository = new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
+        var run = await repository.GetLatestIngestionRunAsync(cancellationToken);
         return run is null
             ? Json(HttpStatusCode.NotFound, new { error = "No ingestion run found." })
             : Json(HttpStatusCode.OK, run);
     }
 
-    private FuelMixRepository Repository() => new(_dataSource);
+    private async Task<NpgsqlDataSource> GetDataSourceAsync(CancellationToken cancellationToken)
+    {
+        if (_dataSource is { } dataSource)
+        {
+            return dataSource;
+        }
+
+        await _dataSourceLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_dataSource is { } cachedDataSource)
+            {
+                return cachedDataSource;
+            }
+
+            dataSource = await _dataSourceFactory(cancellationToken);
+            _dataSource = dataSource;
+            return dataSource;
+        }
+        finally
+        {
+            _dataSourceLock.Release();
+        }
+    }
+
+    private static string? BearerToken(string? authorizationToken)
+    {
+        const string prefix = "Bearer ";
+        return authorizationToken?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true
+            ? authorizationToken[prefix.Length..]
+            : null;
+    }
 
     private static APIGatewayProxyResponse Json(HttpStatusCode statusCode, object body)
     {
@@ -178,9 +249,14 @@ public sealed class Function
             return false;
         }
 
-        if (!DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out value))
+        if (!DateTime.TryParseExact(
+                text,
+                SourceLocalDateFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out value))
         {
-            error = $"Query parameter '{name}' must be a valid date.";
+            error = $"Query parameter '{name}' must be a valid source-local date.";
             return false;
         }
 

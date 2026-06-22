@@ -10,14 +10,19 @@ namespace TecFuelMix.WriterLambda;
 public sealed class Function
 {
     private static readonly TimeSpan TimeoutSafetyBuffer = TimeSpan.FromSeconds(1);
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly Task<NpgsqlDataSource> _dataSource;
 
     public Function()
-        : this(NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("POSTGRES_CONNECTION_STRING") ?? ""))
+        : this(DatabaseConnectionFactory.CreateAsync(CancellationToken.None))
     {
     }
 
     public Function(NpgsqlDataSource dataSource)
+        : this(Task.FromResult(dataSource))
+    {
+    }
+
+    private Function(Task<NpgsqlDataSource> dataSource)
     {
         _dataSource = dataSource;
     }
@@ -27,7 +32,7 @@ public sealed class Function
         using var timeout = CreateInvocationTimeout(context);
         var cancellationToken = timeout.Token;
         var failures = new List<SQSBatchResponse.BatchItemFailure>();
-        var repository = new FuelMixRepository(_dataSource);
+        var repository = new FuelMixRepository(await _dataSource.WaitAsync(cancellationToken));
 
         foreach (var record in evnt.Records)
         {

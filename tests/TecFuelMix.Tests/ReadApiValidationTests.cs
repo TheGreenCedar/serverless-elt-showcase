@@ -72,7 +72,30 @@ public sealed class ReadApiValidationTests
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains(key, response.Body);
-        Assert.Contains("valid date", response.Body);
+        Assert.Contains("source-local date", response.Body);
+    }
+
+    [Theory]
+    [InlineData("2026-06-01T00:00:00Z")]
+    [InlineData("2026-06-01T00:00:00-05:00")]
+    [InlineData("2026-06-01T00:00:00+00:00")]
+    public async Task History_rejects_offset_dates(string from)
+    {
+        var function = new Function(null!);
+
+        var response = await function.Handler(new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = "/fuel-mix",
+            QueryStringParameters = new Dictionary<string, string>
+            {
+                ["from"] = from,
+                ["to"] = "2026-06-02T00:00:00"
+            }
+        }, null!);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Contains("source-local", response.Body);
     }
 
     [Theory]
@@ -253,5 +276,77 @@ public sealed class ReadApiValidationTests
             truncate table ingestion_runs, fuel_mix_readings, fuel_mix_snapshots restart identity cascade;
             """);
         await cleanup.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public void Authorize_allows_matching_bearer_token()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            AuthorizationToken = "Bearer test-token",
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var env = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("Allow", Effect(response));
+    }
+
+    [Fact]
+    public void Authorize_denies_missing_token()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var env = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("Deny", Effect(response));
+    }
+
+    [Fact]
+    public void Authorize_denies_wrong_token()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            AuthorizationToken = "Bearer wrong-token",
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var env = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("Deny", Effect(response));
+    }
+
+    [Fact]
+    public void Authorize_denies_token_without_bearer_scheme()
+    {
+        var function = new Function(null!);
+        var request = new APIGatewayCustomAuthorizerRequest
+        {
+            AuthorizationToken = "test-token",
+            MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
+        };
+
+        using var env = new EnvironmentVariableScope("READ_API_BEARER_TOKEN", "test-token");
+
+        var response = function.Authorize(request, null!);
+
+        Assert.Equal("Deny", Effect(response));
+    }
+
+    private static string Effect(APIGatewayCustomAuthorizerResponse response)
+    {
+        return response.PolicyDocument.Statement.Single().Effect;
     }
 }
