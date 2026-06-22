@@ -85,7 +85,7 @@ docker build -f .\src\TecFuelMix.ReadApiLambda\Dockerfile -t tec-fuelmix-read-ap
 
 Terraform creates the RDS instance, RDS Proxy secrets, and Lambda environment wiring, but it does not connect to PostgreSQL to apply schema migrations or bootstrap application roles. For an AWS deployment, run the DbUp migrator from an operator host that can reach the private RDS endpoint, using the admin credentials created for RDS. This has not been applied to AWS in this local technical challenge.
 
-Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
+The application role names are fixed as `fuelmix_writer` and `fuelmix_reader`; Terraform and the migrator both assume those names. Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
 
 ```powershell
 $env:POSTGRES_ADMIN_CONNECTION_STRING='Host=<rds-endpoint>;Port=5432;Database=fuelmix;Username=fuelmix_admin;Password=<admin-password>;SSL Mode=Require'

@@ -1,6 +1,8 @@
 locals {
-  db_name = "fuelmix"
-  db_port = 5432
+  db_name            = "fuelmix"
+  db_port            = 5432
+  writer_db_username = "fuelmix_writer"
+  read_db_username   = "fuelmix_reader"
 }
 
 resource "aws_security_group" "lambda_clients" {
@@ -87,7 +89,7 @@ resource "aws_secretsmanager_secret_version" "writer_db" {
   secret_id = aws_secretsmanager_secret.writer_db.id
 
   secret_string = jsonencode({
-    username = var.writer_db_username
+    username = local.writer_db_username
     password = var.writer_db_password
   })
 }
@@ -100,7 +102,7 @@ resource "aws_secretsmanager_secret_version" "read_db" {
   secret_id = aws_secretsmanager_secret.read_db.id
 
   secret_string = jsonencode({
-    username = var.read_db_username
+    username = local.read_db_username
     password = var.read_db_password
   })
 }

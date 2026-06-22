@@ -1,6 +1,6 @@
 locals {
-  writer_postgres_connection_string = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${var.writer_db_username};Password=${var.writer_db_password};SSL Mode=Require"
-  read_postgres_connection_string   = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${var.read_db_username};Password=${var.read_db_password};SSL Mode=Require"
+  writer_postgres_connection_string = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${local.writer_db_username};Password=${var.writer_db_password};SSL Mode=Require"
+  read_postgres_connection_string   = "Host=${aws_db_proxy.postgres.endpoint};Port=${local.db_port};Database=${local.db_name};Username=${local.read_db_username};Password=${var.read_db_password};SSL Mode=Require"
 }
 
 data "aws_iam_policy_document" "lambda_assume" {

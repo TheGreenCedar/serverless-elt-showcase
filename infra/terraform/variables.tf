@@ -37,22 +37,10 @@ variable "db_admin_password" {
   sensitive   = true
 }
 
-variable "writer_db_username" {
-  description = "PostgreSQL writer username. The role and grants must be bootstrapped outside this Terraform-only slice."
-  type        = string
-  default     = "fuelmix_writer"
-}
-
 variable "writer_db_password" {
   description = "PostgreSQL writer password stored for RDS Proxy auth."
   type        = string
   sensitive   = true
-}
-
-variable "read_db_username" {
-  description = "PostgreSQL read-only username. The role and grants must be bootstrapped outside this Terraform-only slice."
-  type        = string
-  default     = "fuelmix_reader"
 }
 
 variable "read_db_password" {
