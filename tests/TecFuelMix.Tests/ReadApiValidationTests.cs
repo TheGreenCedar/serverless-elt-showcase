@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Npgsql;
 using TecFuelMix.Core;
@@ -49,6 +50,53 @@ public sealed class ReadApiValidationTests
         Assert.Contains("from", response.Body);
     }
 
+    [Theory]
+    [InlineData("from", "not-a-date")]
+    [InlineData("to", "still-not-a-date")]
+    public async Task History_rejects_invalid_date_strings(string key, string value)
+    {
+        var function = new Function(null!);
+        var query = new Dictionary<string, string>
+        {
+            ["from"] = "2026-06-01T00:00:00",
+            ["to"] = "2026-06-02T00:00:00"
+        };
+        query[key] = value;
+
+        var response = await function.Handler(new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = "/fuel-mix",
+            QueryStringParameters = query
+        }, null!);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Contains(key, response.Body);
+        Assert.Contains("valid date", response.Body);
+    }
+
+    [Theory]
+    [InlineData("2026-06-01T00:00:00")]
+    [InlineData("2026-05-31T23:59:59")]
+    public async Task History_rejects_to_before_or_equal_from(string to)
+    {
+        var function = new Function(null!);
+
+        var response = await function.Handler(new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = "/fuel-mix",
+            QueryStringParameters = new Dictionary<string, string>
+            {
+                ["from"] = "2026-06-01T00:00:00",
+                ["to"] = to
+            }
+        }, null!);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Contains("after", response.Body);
+    }
+
     [Fact]
     public async Task History_rejects_range_over_seven_days()
     {
@@ -88,6 +136,44 @@ public sealed class ReadApiValidationTests
 
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("500", response.Body);
+    }
+
+    [Fact]
+    public async Task History_uses_default_limit_100()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await ResetDatabase(dataSource);
+        var repository = new FuelMixRepository(dataSource);
+        var seed = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
+        var start = new DateTime(2026, 6, 1, 0, 0, 0);
+        for (var i = 0; i < 101; i++)
+        {
+            await repository.UpsertSnapshotAsync(seed with
+            {
+                SourceRefId = $"snapshot-{i:D3}",
+                IntervalEst = start.AddMinutes(i),
+                TotalMw = i,
+                Readings =
+                [
+                    new FuelMixReading("Coal", i, $"Coal  ({i} MW)")
+                ]
+            }, CancellationToken.None);
+        }
+
+        var response = await new Function(dataSource).Handler(new APIGatewayProxyRequest
+        {
+            HttpMethod = "GET",
+            Path = "/fuel-mix",
+            QueryStringParameters = new Dictionary<string, string>
+            {
+                ["from"] = start.AddMinutes(-1).ToString("O"),
+                ["to"] = start.AddMinutes(102).ToString("O")
+            }
+        }, null!);
+
+        Assert.Equal(200, response.StatusCode);
+        using var document = JsonDocument.Parse(response.Body);
+        Assert.Equal(100, document.RootElement.GetArrayLength());
     }
 
     [Fact]
