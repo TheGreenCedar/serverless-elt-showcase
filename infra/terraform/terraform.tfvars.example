@@ -2,10 +2,30 @@ aws_region = "us-east-1"
 project_name = "tec-fuelmix"
 vpc_id = "vpc-00000000000000000"
 private_subnet_ids = ["subnet-00000000000000000", "subnet-11111111111111111"]
+
+# These placeholder secrets are marked sensitive in Terraform, but applied values
+# still land in Terraform state. Use encrypted remote state with tightly scoped
+# access for real deployments, and rotate credentials if state access is exposed.
 db_admin_password = "replace-me-admin-password"
 writer_db_password = "replace-me-writer-password"
 read_db_password = "replace-me-reader-password"
 read_api_bearer_token = "replace-me-reader-token"
+
+# Production-shaped RDS durability defaults are intentionally safer than the
+# fastest teardown path.
+rds_deletion_protection = true
+rds_skip_final_snapshot = false
+rds_final_snapshot_identifier = "tec-fuelmix-postgres-final"
+rds_backup_retention_days = 7
+
+# Disposable challenge teardown override:
+# 1. apply once with rds_deletion_protection = false
+# 2. destroy with rds_skip_final_snapshot = true if you do not need a final copy
+# rds_deletion_protection = false
+# rds_skip_final_snapshot = true
+# rds_backup_retention_days = 1
+
 fetch_lambda_image_uri = "000000000000.dkr.ecr.us-east-1.amazonaws.com/tec-fuelmix-fetch:latest"
 writer_lambda_image_uri = "000000000000.dkr.ecr.us-east-1.amazonaws.com/tec-fuelmix-writer:latest"
 read_api_lambda_image_uri = "000000000000.dkr.ecr.us-east-1.amazonaws.com/tec-fuelmix-read-api:latest"
+migrator_lambda_image_uri = "000000000000.dkr.ecr.us-east-1.amazonaws.com/tec-fuelmix-migrator:latest"

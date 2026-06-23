@@ -30,6 +30,9 @@ terraform.tfvars
 !terraform.tfvars.example
 *.tfplan
 
+# Live AWS deployment evidence may contain account IDs, URLs, or unredacted output.
+docs/evidence/aws-*
+
 # OS files
 Thumbs.db
 .DS_Store

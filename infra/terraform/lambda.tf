@@ -29,6 +29,11 @@ resource "aws_iam_role" "read_api_authorizer_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
+resource "aws_iam_role" "migrator_lambda" {
+  name               = "${var.project_name}-migrator-lambda"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
 resource "aws_iam_role_policy_attachment" "fetch_lambda_basic" {
   role       = aws_iam_role.fetch_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -57,6 +62,16 @@ resource "aws_iam_role_policy_attachment" "read_api_lambda_vpc" {
 resource "aws_iam_role_policy_attachment" "read_api_authorizer_lambda_basic" {
   role       = aws_iam_role.read_api_authorizer_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "migrator_lambda_basic" {
+  role       = aws_iam_role.migrator_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "migrator_lambda_vpc" {
+  role       = aws_iam_role.migrator_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy" "fetch_sqs" {
@@ -144,6 +159,26 @@ resource "aws_iam_role_policy" "read_api_db_secret" {
   })
 }
 
+resource "aws_iam_role_policy" "migrator_db_secrets" {
+  name = "${var.project_name}-migrator-db-secrets"
+  role = aws_iam_role.migrator_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          aws_secretsmanager_secret.db_admin.arn,
+          aws_secretsmanager_secret.writer_db.arn,
+          aws_secretsmanager_secret.read_db.arn
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "fetch" {
   name              = "/aws/lambda/${var.project_name}-fetch"
   retention_in_days = 14
@@ -161,6 +196,11 @@ resource "aws_cloudwatch_log_group" "read_api" {
 
 resource "aws_cloudwatch_log_group" "read_api_authorizer" {
   name              = "/aws/lambda/${var.project_name}-read-api-authorizer"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "migrator" {
+  name              = "/aws/lambda/${var.project_name}-migrator"
   retention_in_days = 14
 }
 
@@ -284,6 +324,39 @@ resource "aws_lambda_function" "read_api_authorizer" {
   depends_on = [
     aws_cloudwatch_log_group.read_api_authorizer,
     aws_iam_role_policy_attachment.read_api_authorizer_lambda_basic
+  ]
+}
+
+resource "aws_lambda_function" "migrator" {
+  function_name                  = "${var.project_name}-migrator"
+  role                           = aws_iam_role.migrator_lambda.arn
+  package_type                   = "Image"
+  image_uri                      = var.migrator_lambda_image_uri
+  timeout                        = 300
+  reserved_concurrent_executions = 1
+
+  vpc_config {
+    security_group_ids = [aws_security_group.lambda_clients.id]
+    subnet_ids         = var.private_subnet_ids
+  }
+
+  environment {
+    variables = {
+      POSTGRES_ADMIN_SECRET_ARN = aws_secretsmanager_secret.db_admin.arn
+      POSTGRES_DATABASE         = local.db_name
+      POSTGRES_HOST             = aws_db_proxy.postgres.endpoint
+      READ_DB_SECRET_ARN        = aws_secretsmanager_secret.read_db.arn
+      WRITER_DB_SECRET_ARN      = aws_secretsmanager_secret.writer_db.arn
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.migrator,
+    aws_db_proxy_target.postgres,
+    aws_iam_role_policy.migrator_db_secrets,
+    aws_iam_role_policy_attachment.migrator_lambda_basic,
+    aws_iam_role_policy_attachment.migrator_lambda_vpc,
+    aws_vpc_endpoint.secretsmanager
   ]
 }
 
