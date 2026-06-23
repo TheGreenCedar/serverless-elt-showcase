@@ -7,7 +7,6 @@ C#/.NET implementation of a serverless ELT flow for MISO real-time fuel mix data
 This README and `docs/evidence/` are the canonical evaluator-facing implementation and verification surfaces. The planning files below are non-canonical context: they explain earlier design reasoning and task sequencing, but they may include superseded plan steps or evidence targets.
 
 - [planning/tec-fuelmix-plan.md](planning/tec-fuelmix-plan.md): architecture reasoning, scale decisions, data model, and interview talking points.
-- [planning/TEC_SeniorEng_TechnicalTest.md](planning/TEC_SeniorEng_TechnicalTest.md): original challenge brief preserved beside the implementation plans.
 - [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
 - [planning/2026-06-22-tec-fuelmix-full-submission-hardening.md](planning/2026-06-22-tec-fuelmix-full-submission-hardening.md): final hardening plan used to drive the broad implementation pass.
 - [planning/2026-06-22-parallel-worktree-execution-plan.md](planning/2026-06-22-parallel-worktree-execution-plan.md): parallel worktree execution plan used to split and review the later tasks.
