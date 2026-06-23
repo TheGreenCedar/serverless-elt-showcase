@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
-using Npgsql;
 using TecFuelMix.Core;
 using TecFuelMix.ReadApiLambda;
 
@@ -11,8 +10,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task Latest_returns_ok_when_snapshot_exists()
     {
-        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
-        await TestDatabase.ResetAsync(dataSource);
+        await using var dataSource = await TestDatabase.CreateResetDataSourceAsync();
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
@@ -137,8 +135,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task History_uses_default_limit_100()
     {
-        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
-        await TestDatabase.ResetAsync(dataSource);
+        await using var dataSource = await TestDatabase.CreateResetDataSourceAsync();
         var repository = new FuelMixRepository(dataSource);
         var seed = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         var start = new DateTime(2026, 6, 1, 0, 0, 0);
@@ -172,8 +169,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task Categories_returns_ok()
     {
-        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
-        await TestDatabase.ResetAsync(dataSource);
+        await using var dataSource = await TestDatabase.CreateResetDataSourceAsync();
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
@@ -188,8 +184,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task LatestIngestionRun_returns_ok()
     {
-        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
-        await TestDatabase.ResetAsync(dataSource);
+        await using var dataSource = await TestDatabase.CreateResetDataSourceAsync();
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);

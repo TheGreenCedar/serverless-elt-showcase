@@ -12,10 +12,4 @@
     <PackageReference Include="AWS.Lambda.Powertools.Metrics" Version="3.2.2" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
 </Project>

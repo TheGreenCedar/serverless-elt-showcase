@@ -28,4 +28,32 @@ internal static class TestDatabase
             """);
         await cleanup.ExecuteNonQueryAsync();
     }
+
+    public static async Task<NpgsqlDataSource> CreateResetDataSourceAsync()
+    {
+        var dataSource = NpgsqlDataSource.Create(LocalConnectionString);
+        try
+        {
+            await ResetAsync(dataSource);
+            return dataSource;
+        }
+        catch
+        {
+            await dataSource.DisposeAsync();
+            throw;
+        }
+    }
+
+    public static async Task<(long Snapshots, long Readings)> CountRowsAsync(NpgsqlDataSource dataSource)
+    {
+        await using var command = dataSource.CreateCommand("""
+            select
+                (select count(*) from fuel_mix_snapshots) as snapshot_count,
+                (select count(*) from fuel_mix_readings) as reading_count
+            """);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetInt64(0), reader.GetInt64(1));
+    }
 }

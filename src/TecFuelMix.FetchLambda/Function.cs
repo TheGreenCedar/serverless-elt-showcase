@@ -40,7 +40,7 @@ namespace TecFuelMix.FetchLambda
                     throw new InvalidOperationException("RAW_SNAPSHOT_QUEUE_URL is required.");
                 }
 
-                using var timeout = CreateInvocationTimeout(context);
+                using var timeout = InvocationTimeout.Create(context.RemainingTime, TimeoutSafetyBuffer);
                 var cancellationToken = timeout.Token;
                 using var response = await _httpClient.GetAsync(FuelMixUri, cancellationToken);
                 response.EnsureSuccessStatusCode();
@@ -69,19 +69,5 @@ namespace TecFuelMix.FetchLambda
             }
         }
 
-        private static CancellationTokenSource CreateInvocationTimeout(ILambdaContext context)
-        {
-            var timeout = new CancellationTokenSource();
-            var remaining = context.RemainingTime;
-
-            if (remaining <= TimeoutSafetyBuffer)
-            {
-                timeout.Cancel();
-                return timeout;
-            }
-
-            timeout.CancelAfter(remaining - TimeoutSafetyBuffer);
-            return timeout;
-        }
     }
 }

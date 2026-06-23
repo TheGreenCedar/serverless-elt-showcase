@@ -44,6 +44,12 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _respawner!.ResetAsync(connection);
     }
 
+    public async Task<NpgsqlDataSource> CreateResetDataSourceAsync()
+    {
+        await ResetAsync();
+        return NpgsqlDataSource.Create(ConnectionString);
+    }
+
     public Task DisposeAsync()
     {
         return _container.DisposeAsync().AsTask();

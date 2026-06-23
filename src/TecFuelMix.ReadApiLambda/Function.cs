@@ -39,19 +39,18 @@ public sealed class Function
         "/health"
     ];
 
-    private readonly Func<CancellationToken, Task<NpgsqlDataSource>> _dataSourceFactory;
-    private readonly SemaphoreSlim _dataSourceLock = new(1, 1);
-    private NpgsqlDataSource? _dataSource;
+    private readonly DataSourceCache _dataSourceCache;
+
+    private readonly record struct HistoryQuery(DateTime From, DateTime To, string? Category, int Limit);
 
     public Function()
     {
-        _dataSourceFactory = DatabaseConnectionFactory.CreateAsync;
+        _dataSourceCache = new DataSourceCache(DatabaseConnectionFactory.CreateAsync);
     }
 
     public Function(NpgsqlDataSource dataSource)
     {
-        _dataSource = dataSource;
-        _dataSourceFactory = _ => Task.FromResult(dataSource);
+        _dataSourceCache = new DataSourceCache(dataSource);
     }
 
     public static Function CreateWithDataSourceFactory(Func<CancellationToken, Task<NpgsqlDataSource>> dataSourceFactory)
@@ -61,7 +60,7 @@ public sealed class Function
 
     private Function(Func<CancellationToken, Task<NpgsqlDataSource>> dataSourceFactory)
     {
-        _dataSourceFactory = dataSourceFactory;
+        _dataSourceCache = new DataSourceCache(dataSourceFactory);
     }
 
     public APIGatewayCustomAuthorizerResponse Authorize(APIGatewayCustomAuthorizerRequest request, ILambdaContext context)
@@ -95,7 +94,9 @@ public sealed class Function
     public async Task<APIGatewayProxyResponse> Handler(APIGatewayProxyRequest request, ILambdaContext context)
     {
         Metrics.PushSingleMetric("FuelMixReadRequest", 1, MetricUnit.Count, MetricsNamespace, ServiceName);
-        using var timeout = CreateInvocationTimeout(context);
+        using var timeout = InvocationTimeout.Create(
+            context?.RemainingTime ?? TimeSpan.FromSeconds(30),
+            TimeoutSafetyBuffer);
 
         try
         {
@@ -149,45 +150,22 @@ public sealed class Function
         IDictionary<string, string>? query,
         CancellationToken cancellationToken)
     {
-        if (!TryReadDate(query, "from", out var from, out var error) ||
-            !TryReadDate(query, "to", out var to, out error))
+        if (!TryReadHistoryQuery(query, out var historyQuery, out var error, out var logInvalidDate))
         {
-            Logger.LogInformation("Rejected fuel mix history request with invalid date query.");
-            return Json(HttpStatusCode.BadRequest, new { error });
+            if (logInvalidDate)
+            {
+                Logger.LogInformation("Rejected fuel mix history request with invalid date query.");
+            }
+
+            return BadRequest(error);
         }
 
-        if (to <= from)
-        {
-            return Json(HttpStatusCode.BadRequest, new { error = "Query parameter 'to' must be after 'from'." });
-        }
-
-        if (to - from > TimeSpan.FromDays(MaxRangeDays))
-        {
-            return Json(HttpStatusCode.BadRequest, new { error = $"History range cannot exceed {MaxRangeDays} days." });
-        }
-
-        var limit = DefaultLimit;
-        if (query?.TryGetValue("limit", out var limitText) == true &&
-            (!int.TryParse(limitText, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit <= 0))
-        {
-            return Json(HttpStatusCode.BadRequest, new { error = "Query parameter 'limit' must be a positive integer." });
-        }
-
-        if (limit > MaxLimit)
-        {
-            return Json(HttpStatusCode.BadRequest, new { error = $"Query parameter 'limit' cannot exceed {MaxLimit}." });
-        }
-
-        var category = query?.TryGetValue("category", out var categoryText) == true &&
-            !string.IsNullOrWhiteSpace(categoryText)
-            ? categoryText.Trim()
-            : null;
         var repository = await CreateRepositoryAsync(cancellationToken);
         var rows = await repository.QueryHistoryAsync(
-            from,
-            to,
-            category,
-            limit,
+            historyQuery.From,
+            historyQuery.To,
+            historyQuery.Category,
+            historyQuery.Limit,
             cancellationToken);
 
         return Json(HttpStatusCode.OK, rows);
@@ -211,32 +189,7 @@ public sealed class Function
 
     private async Task<FuelMixRepository> CreateRepositoryAsync(CancellationToken cancellationToken)
     {
-        return new FuelMixRepository(await GetDataSourceAsync(cancellationToken));
-    }
-
-    private async Task<NpgsqlDataSource> GetDataSourceAsync(CancellationToken cancellationToken)
-    {
-        if (_dataSource is { } dataSource)
-        {
-            return dataSource;
-        }
-
-        await _dataSourceLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (_dataSource is { } cachedDataSource)
-            {
-                return cachedDataSource;
-            }
-
-            dataSource = await _dataSourceFactory(cancellationToken);
-            _dataSource = dataSource;
-            return dataSource;
-        }
-        finally
-        {
-            _dataSourceLock.Release();
-        }
+        return new FuelMixRepository(await _dataSourceCache.GetAsync(cancellationToken));
     }
 
     private static string? BearerToken(string? authorizationToken)
@@ -269,6 +222,11 @@ public sealed class Function
     {
         Logger.LogInformation("Read API route not found.");
         return Json(HttpStatusCode.NotFound, new { error = "Not found." });
+    }
+
+    private static APIGatewayProxyResponse BadRequest(string error)
+    {
+        return Json(HttpStatusCode.BadRequest, new { error });
     }
 
     private static APIGatewayProxyResponse Json(HttpStatusCode statusCode, object body)
@@ -314,6 +272,64 @@ public sealed class Function
         return normalized.ToLowerInvariant();
     }
 
+    private static bool TryReadHistoryQuery(
+        IDictionary<string, string>? query,
+        out HistoryQuery historyQuery,
+        out string error,
+        out bool logInvalidDate)
+    {
+        historyQuery = default;
+        logInvalidDate = false;
+        if (!TryReadDate(query, "from", out var from, out var fromError))
+        {
+            logInvalidDate = true;
+            error = fromError ?? "";
+            return false;
+        }
+
+        if (!TryReadDate(query, "to", out var to, out var toError))
+        {
+            logInvalidDate = true;
+            error = toError ?? "";
+            return false;
+        }
+
+        if (to <= from)
+        {
+            error = "Query parameter 'to' must be after 'from'.";
+            return false;
+        }
+
+        if (to - from > TimeSpan.FromDays(MaxRangeDays))
+        {
+            error = $"History range cannot exceed {MaxRangeDays} days.";
+            return false;
+        }
+
+        var limit = DefaultLimit;
+        if (query?.TryGetValue("limit", out var limitText) == true &&
+            (!int.TryParse(limitText, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit <= 0))
+        {
+            error = "Query parameter 'limit' must be a positive integer.";
+            return false;
+        }
+
+        if (limit > MaxLimit)
+        {
+            error = $"Query parameter 'limit' cannot exceed {MaxLimit}.";
+            return false;
+        }
+
+        var category = query?.TryGetValue("category", out var categoryText) == true &&
+            !string.IsNullOrWhiteSpace(categoryText)
+            ? categoryText.Trim()
+            : null;
+
+        historyQuery = new HistoryQuery(from, to, category, limit);
+        error = "";
+        return true;
+    }
+
     private static bool TryReadDate(
         IDictionary<string, string>? query,
         string name,
@@ -348,18 +364,4 @@ public sealed class Function
         return Math.Max(0, (DateTimeOffset.UtcNow - interval).TotalSeconds);
     }
 
-    private static CancellationTokenSource CreateInvocationTimeout(ILambdaContext? context)
-    {
-        var timeout = new CancellationTokenSource();
-        var remaining = context?.RemainingTime ?? TimeSpan.FromSeconds(30);
-
-        if (remaining <= TimeoutSafetyBuffer)
-        {
-            timeout.Cancel();
-            return timeout;
-        }
-
-        timeout.CancelAfter(remaining - TimeoutSafetyBuffer);
-        return timeout;
-    }
 }
