@@ -1,14 +1,15 @@
   Determining projects to restore...
   All projects are up-to-date for restore.
   TecFuelMix.Core -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\src\TecFuelMix.Core\bin\Debug\net10.0\TecFuelMix.Core.dll
+  TecFuelMix.DbMigrator -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\src\TecFuelMix.DbMigrator\bin\Debug\net10.0\TecFuelMix.DbMigrator.dll
+  AspectInjector|2.8.1: Found 0 aspects, 0 injections
+  AspectInjector|2.8.1: Found 0 aspects, 0 injections
   AspectInjector|2.8.1: Found 0 aspects, 0 injections
   TecFuelMix.WriterLambda -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\src\TecFuelMix.WriterLambda\bin\Debug\net10.0\TecFuelMix.WriterLambda.dll
-  AspectInjector|2.8.1: Found 0 aspects, 0 injections
-  AspectInjector|2.8.1: Found 0 aspects, 0 injections
   TecFuelMix.ReadApiLambda -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\src\TecFuelMix.ReadApiLambda\bin\Debug\net10.0\TecFuelMix.ReadApiLambda.dll
   TecFuelMix.FetchLambda -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\src\TecFuelMix.FetchLambda\bin\Debug\net10.0\TecFuelMix.FetchLambda.dll
   TecFuelMix.Tests -> C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\tests\TecFuelMix.Tests\bin\Debug\net10.0\TecFuelMix.Tests.dll
 Test run for C:\Users\alber\OneDrive\Documents\TEC_TechnicalTest\tests\TecFuelMix.Tests\bin\Debug\net10.0\TecFuelMix.Tests.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
 
-Passed!  - Failed:     0, Passed:    38, Skipped:     0, Total:    38, Duration: 8 s - TecFuelMix.Tests.dll (net10.0)
+Passed!  - Failed:     0, Passed:    42, Skipped:     0, Total:    42, Duration: 7 s - TecFuelMix.Tests.dll (net10.0)
