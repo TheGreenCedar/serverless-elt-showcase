@@ -68,8 +68,8 @@ public sealed class Function
     {
         var expected = Environment.GetEnvironmentVariable("READ_API_BEARER_TOKEN");
         var actual = BearerToken(request.AuthorizationToken);
-        var effect = !string.IsNullOrWhiteSpace(expected) && actual == expected ? "Allow" : "Deny";
-        var resource = effect == "Allow"
+        var isAllowed = !string.IsNullOrWhiteSpace(expected) && actual == expected;
+        var resource = isAllowed
             ? ReadApiRouteSetArn(request.MethodArn)
             : request.MethodArn;
 
@@ -84,7 +84,7 @@ public sealed class Function
                     new APIGatewayCustomAuthorizerPolicy.IAMPolicyStatement
                     {
                         Action = ["execute-api:Invoke"],
-                        Effect = effect,
+                        Effect = isAllowed ? "Allow" : "Deny",
                         Resource = [resource]
                     }
                 ]
@@ -178,14 +178,15 @@ public sealed class Function
             return Json(HttpStatusCode.BadRequest, new { error = $"Query parameter 'limit' cannot exceed {MaxLimit}." });
         }
 
-        var category = query?.TryGetValue("category", out var categoryText) == true
+        var category = query?.TryGetValue("category", out var categoryText) == true &&
+            !string.IsNullOrWhiteSpace(categoryText)
             ? categoryText.Trim()
             : null;
         var repository = await CreateRepositoryAsync(cancellationToken);
         var rows = await repository.QueryHistoryAsync(
             from,
             to,
-            string.IsNullOrWhiteSpace(category) ? null : category,
+            category,
             limit,
             cancellationToken);
 

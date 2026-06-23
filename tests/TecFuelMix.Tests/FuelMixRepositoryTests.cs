@@ -171,10 +171,7 @@ public sealed class FuelMixRepositoryTests : IClassFixture<PostgresFixture>
         await _postgres.ResetAsync();
         await using var dataSource = NpgsqlDataSource.Create(_postgres.ConnectionString);
 
-        var roles = await File.ReadAllTextAsync(Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "src", "TecFuelMix.Core", "Migrations", "002_roles.sql")));
+        var roles = await File.ReadAllTextAsync(TestDatabase.MigrationPath("002_roles.sql"));
         await using (var rolesCommand = dataSource.CreateCommand(roles))
         {
             await rolesCommand.ExecuteNonQueryAsync();

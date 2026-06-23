@@ -8,14 +8,11 @@ namespace TecFuelMix.Tests;
 
 public sealed class ReadApiValidationTests
 {
-    private const string ConnectionString =
-        "Host=localhost;Port=55432;Database=fuelmix;Username=fuelmix_app;Password=fuelmix_dev_password";
-
     [Fact]
     public async Task Latest_returns_ok_when_snapshot_exists()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
+        await TestDatabase.ResetAsync(dataSource);
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
@@ -35,7 +32,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task History_rejects_missing_dates()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request("/fuel-mix"), null!);
 
@@ -48,7 +45,7 @@ public sealed class ReadApiValidationTests
     [InlineData("to", "still-not-a-date")]
     public async Task History_rejects_invalid_date_strings(string key, string value)
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var query = new Dictionary<string, string>
         {
             ["from"] = "2026-06-01T00:00:00",
@@ -69,7 +66,7 @@ public sealed class ReadApiValidationTests
     [InlineData("2026-06-01T00:00:00+00:00")]
     public async Task History_rejects_offset_dates(string from)
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request(
             "/fuel-mix",
@@ -88,7 +85,7 @@ public sealed class ReadApiValidationTests
     [InlineData("2026-05-31T23:59:59")]
     public async Task History_rejects_to_before_or_equal_from(string to)
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request(
             "/fuel-mix",
@@ -105,7 +102,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task History_rejects_range_over_seven_days()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request(
             "/fuel-mix",
@@ -122,7 +119,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task History_rejects_limit_over_500()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request(
             "/fuel-mix",
@@ -140,8 +137,8 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task History_uses_default_limit_100()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
+        await TestDatabase.ResetAsync(dataSource);
         var repository = new FuelMixRepository(dataSource);
         var seed = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         var start = new DateTime(2026, 6, 1, 0, 0, 0);
@@ -175,8 +172,8 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task Categories_returns_ok()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
+        await TestDatabase.ResetAsync(dataSource);
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
@@ -191,8 +188,8 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task LatestIngestionRun_returns_ok()
     {
-        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
-        await ResetDatabase(dataSource);
+        await using var dataSource = NpgsqlDataSource.Create(TestDatabase.LocalConnectionString);
+        await TestDatabase.ResetAsync(dataSource);
         var snapshot = FuelMixParser.Parse(SamplePayloads.FuelMixJson);
         await new FuelMixRepository(dataSource).UpsertSnapshotAsync(snapshot, CancellationToken.None);
         var function = new Function(dataSource);
@@ -207,7 +204,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task Health_returns_ok_without_database_query()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
 
         var response = await function.Handler(Request("/health"), null!);
 
@@ -215,35 +212,10 @@ public sealed class ReadApiValidationTests
         Assert.Contains("ok", response.Body);
     }
 
-    private static async Task ResetDatabase(NpgsqlDataSource dataSource)
-    {
-        var schemaPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "TecFuelMix.Core",
-            "Migrations",
-            "001_schema.sql");
-        var schema = await File.ReadAllTextAsync(schemaPath);
-        await using (var schemaCommand = dataSource.CreateCommand(schema))
-        {
-            await schemaCommand.ExecuteNonQueryAsync();
-        }
-
-        await using var cleanup = dataSource.CreateCommand("""
-            truncate table ingestion_runs, fuel_mix_readings, fuel_mix_snapshots restart identity cascade;
-            """);
-        await cleanup.ExecuteNonQueryAsync();
-    }
-
     [Fact]
     public void Authorize_allows_matching_bearer_token()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = new APIGatewayCustomAuthorizerRequest
         {
             AuthorizationToken = "Bearer test-token",
@@ -281,7 +253,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public void Authorize_denies_missing_token()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = new APIGatewayCustomAuthorizerRequest
         {
             MethodArn = "arn:aws:execute-api:us-east-1:123456789012:api/prod/GET/fuel-mix/latest"
@@ -297,7 +269,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public void Authorize_denies_wrong_token()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = new APIGatewayCustomAuthorizerRequest
         {
             AuthorizationToken = "Bearer wrong-token",
@@ -314,7 +286,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public void Authorize_denies_token_without_bearer_scheme()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = new APIGatewayCustomAuthorizerRequest
         {
             AuthorizationToken = "test-token",
@@ -336,7 +308,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public void Authorize_allows_read_route_set_for_cached_tokens()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = new APIGatewayCustomAuthorizerRequest
         {
             AuthorizationToken = "Bearer test-token",
@@ -367,6 +339,12 @@ public sealed class ReadApiValidationTests
         };
     }
 
+    private static Function FunctionWithoutDatabase()
+    {
+        return Function.CreateWithDataSourceFactory(_ =>
+            throw new InvalidOperationException("Database should not be used."));
+    }
+
     [Fact]
     public async Task Handler_returns_503_for_dependency_failure()
     {
@@ -381,7 +359,7 @@ public sealed class ReadApiValidationTests
     [Fact]
     public async Task Handler_returns_404_for_unknown_route()
     {
-        var function = new Function(null!);
+        var function = FunctionWithoutDatabase();
         var request = Request("/fuel-mix/unknown");
 
         var response = await function.Handler(request, null!);

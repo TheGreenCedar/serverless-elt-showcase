@@ -23,10 +23,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
 
-        var schema = await File.ReadAllTextAsync(Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "src", "TecFuelMix.Core", "Migrations", "001_schema.sql")));
+        var schema = await File.ReadAllTextAsync(TestDatabase.MigrationPath("001_schema.sql"));
 
         await using (var command = new NpgsqlCommand(schema, connection))
         {
