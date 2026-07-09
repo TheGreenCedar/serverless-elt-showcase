@@ -49,6 +49,40 @@ variable "read_db_password" {
   sensitive   = true
 }
 
+variable "rds_deletion_protection" {
+  description = "Whether the RDS instance rejects deletion. Keep true for production-shaped deployments; set false before challenge teardown."
+  type        = bool
+  default     = true
+}
+
+variable "rds_skip_final_snapshot" {
+  description = "Whether RDS deletion skips the final snapshot. Keep false for production-shaped deployments; set true only for disposable challenge teardown."
+  type        = bool
+  default     = false
+}
+
+variable "rds_final_snapshot_identifier" {
+  description = "Final snapshot identifier used when rds_skip_final_snapshot is false. Defaults to '<project_name>-postgres-final' when omitted."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.rds_final_snapshot_identifier == null || length(var.rds_final_snapshot_identifier) > 0
+    error_message = "rds_final_snapshot_identifier must be null or a non-empty string."
+  }
+}
+
+variable "rds_backup_retention_days" {
+  description = "Automated RDS backup retention in days. Use 1-35 for production-shaped deployments; 0 disables automated backups."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.rds_backup_retention_days >= 0 && var.rds_backup_retention_days <= 35
+    error_message = "rds_backup_retention_days must be between 0 and 35."
+  }
+}
+
 variable "fetch_lambda_image_uri" {
   description = "Container image URI for the scheduled fetch Lambda."
   type        = string
@@ -61,6 +95,11 @@ variable "writer_lambda_image_uri" {
 
 variable "read_api_lambda_image_uri" {
   description = "Container image URI for the read API Lambda."
+  type        = string
+}
+
+variable "migrator_lambda_image_uri" {
+  description = "Container image URI for the one-shot database migrator Lambda."
   type        = string
 }
 

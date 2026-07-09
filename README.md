@@ -10,7 +10,6 @@ This README and `docs/evidence/` are the canonical evaluator-facing implementati
 - [planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md](planning/2026-06-22-tec-fuelmix-serverless-elt-implementation-plan.md): implementation task plan used for agent-assisted code generation.
 - [planning/2026-06-22-tec-fuelmix-full-submission-hardening.md](planning/2026-06-22-tec-fuelmix-full-submission-hardening.md): final hardening plan used to drive the broad implementation pass.
 - [planning/2026-06-22-parallel-worktree-execution-plan.md](planning/2026-06-22-parallel-worktree-execution-plan.md): parallel worktree execution plan used to split and review the later tasks.
-
 Use these only as planning context for why the system uses isolated ingestion, SQS buffering, API Gateway caching, RDS Proxy, PostgreSQL constraints, Terraform, and raw Npgsql instead of EF Core.
 
 ## Architecture
@@ -54,7 +53,7 @@ The read Lambda returns controlled JSON errors for dependency outages. Secrets M
 | Read compute | API Gateway + Lambda | Implemented for latest, bounded history, categories, latest ingestion run, and health routes. | Small operational surface; cache/throttle/concurrency controls protect the database. |
 | Database protection | API cache + reserved concurrency + RDS Proxy | Implemented in Terraform; live AWS behavior not exercised locally. | Stops repeated reads early and caps connection pressure on PostgreSQL. |
 | Data access | Npgsql/raw SQL | Implemented in `TecFuelMix.Core`. | Upsert/idempotency is PostgreSQL-specific and small; EF Core would add ceremony here. |
-| Migrations | DbUp console migrator | Implemented for schema, role bootstrap, grants, and optional app-role password rotation. | SQL-first migrations fit the existing schema and make bootstrap rerunnable. |
+| Migrations | DbUp migrator + one-shot migration Lambda | Implemented for schema, role bootstrap, grants, and optional app-role password rotation. | SQL-first migrations fit the existing schema and the AWS-network Lambda closes the private RDS bootstrap step. |
 | Auth | Lambda authorizer + API key usage plan | Implemented in Terraform and `TecFuelMix.ReadApiLambda.Function::Authorize`. | Bearer token handles auth; API key handles throttle/quota. |
 | Infrastructure as code | Terraform only | Implemented; no CDK stack is published. | Avoids duplicate Terraform/CDK stacks while still publishing infrastructure as code. |
 | Runtime telemetry | AWS Lambda Powertools metrics/logging | Implemented in fetch, writer, and read API Lambdas. | Gives CloudWatch signal without custom telemetry plumbing. |
@@ -69,47 +68,51 @@ Prerequisites:
 
 Start local PostgreSQL when running from a clean machine:
 
-```powershell
+```bash
 docker compose up -d db
 ```
 
 Run the local proof commands:
 
-```powershell
-dotnet test .\TecFuelMix.sln
+```bash
+dotnet test ./TecFuelMix.sln
 docker compose ps
+terraform -chdir=infra/terraform init -backend=false
 terraform -chdir=infra/terraform fmt -check
 terraform -chdir=infra/terraform validate
 ```
 
 Build the Lambda container images:
 
-```powershell
-docker build -f .\src\TecFuelMix.FetchLambda\Dockerfile -t tec-fuelmix-fetch .
-docker build -f .\src\TecFuelMix.WriterLambda\Dockerfile -t tec-fuelmix-writer .
-docker build -f .\src\TecFuelMix.ReadApiLambda\Dockerfile -t tec-fuelmix-read-api .
+```bash
+docker build -f ./src/TecFuelMix.FetchLambda/Dockerfile -t tec-fuelmix-fetch .
+docker build -f ./src/TecFuelMix.WriterLambda/Dockerfile -t tec-fuelmix-writer .
+docker build -f ./src/TecFuelMix.ReadApiLambda/Dockerfile -t tec-fuelmix-read-api .
+docker build -f ./src/TecFuelMix.MigratorLambda/Dockerfile -t tec-fuelmix-migrator .
 ```
 
-## Deployment Bootstrap
+## AWS Deployment
 
-Terraform creates the RDS instance, RDS Proxy secrets, and Lambda environment wiring, but it does not connect to PostgreSQL to apply schema migrations or bootstrap application roles. For an AWS deployment, run the DbUp migrator from an operator host that can reach the private RDS endpoint, using the admin credentials created for RDS. This has not been applied to AWS in this local technical challenge.
-
-The application role names are fixed as `fuelmix_writer` and `fuelmix_reader`; Terraform and the migrator both assume those names. Replace the password placeholders with the same values supplied to Terraform for `writer_db_password` and `read_db_password`.
+The repo-owned deployment command builds and pushes all Lambda images, creates ECR repositories through Terraform, applies the infrastructure, invokes the AWS-network migration Lambda, and runs smoke checks. Set `READ_API_BEARER_TOKEN` in the environment before running smoke checks so the bearer token does not land in shell history.
 
 ```powershell
-$env:POSTGRES_ADMIN_CONNECTION_STRING='Host=<rds-endpoint>;Port=5432;Database=fuelmix;Username=fuelmix_admin;Password=<admin-password>;SSL Mode=Require'
-$env:WRITER_DB_PASSWORD='<writer-db-password>'
-$env:READ_DB_PASSWORD='<read-db-password>'
-dotnet run --project .\src\TecFuelMix.DbMigrator\TecFuelMix.DbMigrator.csproj
+$env:READ_API_BEARER_TOKEN='<same-value-as-read_api_bearer_token>'
+.\scripts\deploy-aws.ps1
 ```
 
-If `WRITER_DB_PASSWORD` and `READ_DB_PASSWORD` are omitted, the migrator still applies schema and grant migrations but leaves existing role passwords unchanged. Provide both password variables together when creating or rotating the runtime database users.
+Use `-PlanOnly` to stop after image push and Terraform plan, or `-SkipSmoke` when the deployed API should not be invoked. The detailed operator path is in [docs/runbooks/aws-deployment-and-migration.md](docs/runbooks/aws-deployment-and-migration.md).
+
+The migration Lambda uses the RDS Proxy endpoint, the admin/writer/read Secrets Manager secrets, and the same DbUp SQL embedded in the local console migrator. The application role names are fixed as `fuelmix_writer` and `fuelmix_reader`; Terraform and the migrator both assume those names.
+
+DLQ replay is covered in [docs/runbooks/dlq-redrive.md](docs/runbooks/dlq-redrive.md). Redriving `tec-fuelmix-raw-snapshot-dlq` replays already-fetched raw payloads through the writer and does not call MISO again.
+
+RDS durability, Terraform state handling, and production secret posture are covered in [docs/runbooks/production-posture.md](docs/runbooks/production-posture.md).
 
 Captured evidence from this workspace is stored in `docs/evidence`:
 
 | File | Command | Result |
 | --- | --- | --- |
-| `01-dotnet-test.txt` | `dotnet test .\TecFuelMix.sln` | Passed: 38 tests, 0 failed |
+| `01-dotnet-test.txt` | `dotnet test ./TecFuelMix.sln` | Passed: 42 tests, 0 failed |
 | `02-local-postgres-status.txt` | `docker compose ps` | `db` container running and healthy on host port `55432` |
 | `03-terraform-fmt-check.txt` | `terraform -chdir=infra/terraform fmt -check` | Passed |
 | `04-terraform-validate.txt` | `terraform -chdir=infra/terraform validate` | Terraform configuration valid |
@@ -117,6 +120,8 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | `06-docker-writer-build.txt` | Writer Lambda Docker build | Image `tec-fuelmix-writer:latest` built |
 | `07-docker-read-api-build.txt` | Read API Lambda Docker build | Image `tec-fuelmix-read-api:latest` built |
 | `08-dbup-migrator.txt` | DbUp migrator against local PostgreSQL | Migrations applied; role passwords updated |
+| `09-docker-migrator-build.txt` | Migrator Lambda Docker build | Image `tec-fuelmix-migrator:latest` built |
+| `10-deploy-script-syntax.txt` | PowerShell deployment script syntax check | Passed |
 
 ## Scale And Safety Controls
 
@@ -129,6 +134,8 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | SQS raw snapshot queue + DLQ | `aws_sqs_queue.raw_snapshot` | Decouples MISO fetch success from database availability and preserves failed writes for retry/redrive. |
 | Writer reserved concurrency `1` | `aws_lambda_function.writer` | Keeps database write pressure predictable. |
 | Partial batch failure | SQS event source mapping and writer response | Retries only failed SQS records instead of replaying a whole successful batch. |
+| One-command deploy script | `scripts/deploy-aws.ps1` | Builds/pushes images, applies Terraform, invokes migration, and captures AWS smoke evidence from Windows PowerShell. |
+| Migration Lambda | `aws_lambda_function.migrator` | Runs DbUp from inside the AWS network against the private RDS Proxy endpoint. |
 | PostgreSQL unique keys | `src/TecFuelMix.Core/Migrations/001_schema.sql` | Makes duplicate delivery safe by enforcing one snapshot per `source_ref_id` and one reading per snapshot/category. |
 | API Gateway REST cache | `aws_api_gateway_stage` and method settings | Absorbs repeated reads before Lambda or PostgreSQL are involved. |
 | Query-aware cache key | `aws_api_gateway_integration.fuel_mix_get` | Keeps history cache entries separated by `from`, `to`, `limit`, and `category`. |
@@ -140,12 +147,12 @@ Captured evidence from this workspace is stored in `docs/evidence`:
 | Private Secrets Manager endpoint | `aws_vpc_endpoint.secretsmanager` | Lets VPC Lambdas retrieve DB credentials without public internet/NAT access. |
 | Private RDS security groups | `infra/terraform/rds.tf` | Allows PostgreSQL traffic only through RDS Proxy from Lambda clients. |
 | Read-only DB grants | `002_roles.sql` | Allows read API routes to read snapshots, readings, and ingestion-run status without writer permissions. |
-| CloudWatch alarms | `infra/terraform/alarms.tf` | Surfaces DLQ backlog, read throttles/errors/latency, queue age, and RDS pressure. |
+| CloudWatch alarms | `infra/terraform/alarms.tf` | Surfaces DLQ backlog, read throttles/errors/latency, queue age, RDS pressure, custom fetch/write failures, partial batch failures, and stale successful ingestion. |
 
 ## Known Boundaries
 
 - Terraform was validated locally only. No `terraform plan` or `terraform apply` was run against AWS.
-- RDS role grants and schema/bootstrap execution are documented above but were not applied to AWS. Terraform declares database users/secrets for RDS Proxy auth; PostgreSQL still needs the operational bootstrap step during deployment.
+- The deployment script and migration Lambda are implemented but were not run against AWS in this local challenge.
 - Local tests use a mix of Docker Compose PostgreSQL on port `55432` and Testcontainers-managed PostgreSQL fixtures; they do not prove AWS networking, IAM, or managed-service behavior.
 - Runtime DB credentials are cached in each warm Lambda execution environment. Rotated Secrets Manager values take effect after environment recycle; production hardening could add refresh-on-auth-failure if rotation frequency required it.
 - Live MISO, live SQS delivery, API Gateway cache hit/miss behavior, and RDS Proxy behavior are not exercised by the local evidence.

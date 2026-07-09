@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TecFuelMix.Tests", "tests\T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TecFuelMix.DbMigrator", "src\TecFuelMix.DbMigrator\TecFuelMix.DbMigrator.csproj", "{849FA40F-822F-4F9B-AA90-F2739B60FA88}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TecFuelMix.MigratorLambda", "src\TecFuelMix.MigratorLambda\TecFuelMix.MigratorLambda.csproj", "{2EA8550F-9C66-403D-8437-5EE7569F69A0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +103,18 @@ Global
 		{849FA40F-822F-4F9B-AA90-F2739B60FA88}.Release|x64.Build.0 = Release|Any CPU
 		{849FA40F-822F-4F9B-AA90-F2739B60FA88}.Release|x86.ActiveCfg = Release|Any CPU
 		{849FA40F-822F-4F9B-AA90-F2739B60FA88}.Release|x86.Build.0 = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|x64.Build.0 = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Debug|x86.Build.0 = Debug|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|x64.ActiveCfg = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|x64.Build.0 = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|x86.ActiveCfg = Release|Any CPU
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -112,5 +126,6 @@ Global
 		{B78C9A23-2B54-44C0-8DCE-F497CBC828F7} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{7B6634C6-549C-4443-9BA8-E4CB14E13953} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{849FA40F-822F-4F9B-AA90-F2739B60FA88} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{2EA8550F-9C66-403D-8437-5EE7569F69A0} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

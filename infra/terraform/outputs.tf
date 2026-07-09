@@ -3,6 +3,26 @@ output "raw_snapshot_queue_url" {
   value       = aws_sqs_queue.raw_snapshot.url
 }
 
+output "fetch_ecr_repository_url" {
+  description = "ECR repository URL for the fetch Lambda image."
+  value       = aws_ecr_repository.fetch.repository_url
+}
+
+output "writer_ecr_repository_url" {
+  description = "ECR repository URL for the writer Lambda image."
+  value       = aws_ecr_repository.writer.repository_url
+}
+
+output "read_api_ecr_repository_url" {
+  description = "ECR repository URL for the read API Lambda image."
+  value       = aws_ecr_repository.read_api.repository_url
+}
+
+output "migrator_ecr_repository_url" {
+  description = "ECR repository URL for the migrator Lambda image."
+  value       = aws_ecr_repository.migrator.repository_url
+}
+
 output "rds_proxy_endpoint" {
   description = "Private RDS Proxy endpoint used by writer and read Lambdas."
   value       = aws_db_proxy.postgres.endpoint
@@ -27,6 +47,11 @@ output "read_api_key_value" {
 output "read_api_authorizer_lambda_name" {
   description = "Lambda function name used by API Gateway token authorizer."
   value       = aws_lambda_function.read_api_authorizer.function_name
+}
+
+output "migrator_lambda_name" {
+  description = "One-shot Lambda function name used for database migrations."
+  value       = aws_lambda_function.migrator.function_name
 }
 
 output "writer_db_secret_arn" {

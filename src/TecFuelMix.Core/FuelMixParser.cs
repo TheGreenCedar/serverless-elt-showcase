@@ -19,10 +19,22 @@ public static class FuelMixParser
         }
 
         var interval = ParseInterval(RequiredString(rows[0], "INTERVALEST"));
-        var readings = rows.Select(row => new FuelMixReading(
-            RequiredString(row, "CATEGORY"),
-            ParseDecimal(RequiredString(row, "ACT"), "ACT"),
-            RequiredString(row, "FUEL_CATEGORY"))).ToArray();
+        var readings = new FuelMixReading[rows.Length];
+
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var row = rows[i];
+            var rowInterval = ParseInterval(RequiredString(row, "INTERVALEST"));
+            if (rowInterval != interval)
+            {
+                throw new InvalidOperationException("Fuel.Type contains mixed INTERVALEST values.");
+            }
+
+            readings[i] = new FuelMixReading(
+                RequiredString(row, "CATEGORY"),
+                ParseDecimal(RequiredString(row, "ACT"), "ACT"),
+                RequiredString(row, "FUEL_CATEGORY"));
+        }
 
         return new FuelMixSnapshot(refId, interval, totalMw, json, readings);
     }

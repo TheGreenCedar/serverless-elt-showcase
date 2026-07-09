@@ -147,19 +147,22 @@ resource "aws_secretsmanager_secret_version" "read_db" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier             = "${var.project_name}-postgres"
-  engine                 = "postgres"
-  engine_version         = "16"
-  instance_class         = "db.t4g.micro"
-  allocated_storage      = 20
-  db_name                = local.db_name
-  username               = var.db_admin_username
-  password               = var.db_admin_password
-  db_subnet_group_name   = aws_db_subnet_group.postgres.name
-  vpc_security_group_ids = [aws_security_group.postgres.id]
-  publicly_accessible    = false
-  skip_final_snapshot    = true
-  storage_encrypted      = true
+  identifier                = "${var.project_name}-postgres"
+  engine                    = "postgres"
+  engine_version            = "16"
+  instance_class            = "db.t4g.micro"
+  allocated_storage         = 20
+  backup_retention_period   = var.rds_backup_retention_days
+  db_name                   = local.db_name
+  username                  = var.db_admin_username
+  password                  = var.db_admin_password
+  db_subnet_group_name      = aws_db_subnet_group.postgres.name
+  vpc_security_group_ids    = [aws_security_group.postgres.id]
+  publicly_accessible       = false
+  deletion_protection       = var.rds_deletion_protection
+  skip_final_snapshot       = var.rds_skip_final_snapshot
+  final_snapshot_identifier = var.rds_skip_final_snapshot ? null : coalesce(var.rds_final_snapshot_identifier, "${var.project_name}-postgres-final")
+  storage_encrypted         = true
 }
 
 data "aws_iam_policy_document" "rds_proxy_assume" {
@@ -189,6 +192,7 @@ resource "aws_iam_role_policy" "rds_proxy_secret" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue"]
         Resource = [
+          aws_secretsmanager_secret.db_admin.arn,
           aws_secretsmanager_secret.writer_db.arn,
           aws_secretsmanager_secret.read_db.arn
         ]
@@ -209,6 +213,12 @@ resource "aws_db_proxy" "postgres" {
   auth {
     auth_scheme = "SECRETS"
     iam_auth    = "DISABLED"
+    secret_arn  = aws_secretsmanager_secret.db_admin.arn
+  }
+
+  auth {
+    auth_scheme = "SECRETS"
+    iam_auth    = "DISABLED"
     secret_arn  = aws_secretsmanager_secret.writer_db.arn
   }
 
@@ -220,6 +230,7 @@ resource "aws_db_proxy" "postgres" {
 
   depends_on = [
     aws_iam_role_policy.rds_proxy_secret,
+    aws_secretsmanager_secret_version.db_admin,
     aws_secretsmanager_secret_version.read_db,
     aws_secretsmanager_secret_version.writer_db,
     aws_security_group_rule.proxy_from_lambda,

@@ -124,6 +124,78 @@ resource "aws_cloudwatch_metric_alarm" "writer_errors" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "fuelmix_fetch_failed" {
+  alarm_name          = "${var.project_name}-fuelmix-fetch-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FuelMixFetchFailed"
+  namespace           = "TecFuelMix"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
+
+  dimensions = {
+    service = "FetchLambda"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "fuelmix_write_failed" {
+  alarm_name          = "${var.project_name}-fuelmix-write-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FuelMixWriteFailed"
+  namespace           = "TecFuelMix"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
+
+  dimensions = {
+    service = "WriterLambda"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "fuelmix_partial_batch_failures" {
+  alarm_name          = "${var.project_name}-fuelmix-partial-batch-failures"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FuelMixPartialBatchFailures"
+  namespace           = "TecFuelMix"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
+
+  dimensions = {
+    service = "WriterLambda"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "fuelmix_write_succeeded_stale" {
+  alarm_name          = "${var.project_name}-fuelmix-write-succeeded-stale"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FuelMixWriteSucceeded"
+  namespace           = "TecFuelMix"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.alarm_action_arns
+  ok_actions          = var.alarm_action_arns
+
+  dimensions = {
+    service = "WriterLambda"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "read_api_throttles" {
   alarm_name          = "${var.project_name}-read-api-throttles"
   comparison_operator = "GreaterThanThreshold"
